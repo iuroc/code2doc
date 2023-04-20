@@ -1,8 +1,9 @@
-from str_blocks import str_blocks
+from util import str_blocks, get_all_code
 from chat import get_result
 import os
 
-input_code: str = open('code', 'r', encoding='utf-8').read()
+input_code: str = get_all_code('poncon-copyrighted-music')
+print('源代码整理完成，共 ' + str(len(input_code.splitlines())) + ' 行')
 code_blocks = str_blocks(input_code)  # 代码块列表
 
 if not os.path.exists('out'):
@@ -42,9 +43,9 @@ def get_all_content(main_msg: str):
     for task in tasks:
         print('正在生成正文：' + task)
         cmd = f'''
-这是一个项目的介绍：{main_msg}
-这是一篇文章的大纲：{'、'.join(tasks_str.splitlines())}
-请帮我编写其中的一个模块“{task}”，注意只是编写这一个模块，不是整个大纲，而且不要超过 500 字。
+这是项目的介绍：{main_msg}
+这是我要求的大纲：{'、'.join(tasks_str.splitlines())}
+我不需要你编写大纲中所有内容，你只需要编写其中的一个模块“{task}”，而且不要超过 500 字。
             '''
         content = get_result(cmd)
         file_path = 'out/' + str(i) + '. ' + task
