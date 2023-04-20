@@ -1,3 +1,572 @@
+<?php
+/**
+ * 
+ * 搜索音乐
+ */
+include './init_db.php';
+$keyword = defaultGetData('keyword', '');
+$page = defaultGetData('page', 0);
+$pageSize = defaultGetData('pageSize', 30);
+$username = defaultGetData('username', '');
+$password = defaultGetData('password', '');
+$offset = $page * $pageSize;
+$keyword = addslashes($keyword);
+if (!$keyword) {
+die(json_encode(array(
+'code' => 900,
+'msg' => '参数缺失'
+)));
+}
+if ($username && $password) {
+$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music_user` WHERE (`username` = '$username' OR `email` = '$username') AND `password` = '$password' LIMIT 1");
+if (!mysqli_num_rows($result)) {
+die(json_encode(array(
+'code' => 907,
+'msg' => '账号或密码错误'
+)));
+}
+}
+$sql = "SELECT * FROM `copyrighted_music` WHERE `fileName` LIKE '%$keyword%' OR `fileId` LIKE '%$keyword%' ORDER BY `like_num` DESC LIMIT $pageSize OFFSET $offset;;";
+$result = mysqli_query($conn, $sql);
+if (!$result) {
+die(json_encode(array(
+'code' => 903,
+'msg' => '数据库出错'
+)));
+}
+$data = array('code' => 200, 'msg' => '查询成功', 'result' => array());
+$x = 0;
+while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC)) {
+$collect_userList = $row['collect_userList'];
+$collect_userList_data = explode(',', $collect_userList);
+if ($username && in_array($username, $collect_userList_data)) {
+$row['hasLike'] = 1; // 用户已收藏
+} else {
+$row['hasLike'] = 0; // 用户未收藏
+}
+unset($row['collect_userList']);
+$row['like_num'] = count($collect_userList_data) - 1;
+$data['result'][$x++] = $row;
+}
+echo json_encode($data);
+<?php
+/**
+ * 
+ * 获取文件下载链接
+ */
+include './init_db.php';
+$fileId = defaultGetData('fileId', '');
+// 判断参数是否缺失
+if (!$fileId) {
+die(json_encode(array(
+'code' => 900,
+'msg' => '参数缺失'
+)));
+}
+// 判断文件是否存在
+$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music` WHERE `fileId` = '$fileId' LIMIT 1;");
+if (!$result) {
+die(json_encode(array(
+'code' => 903,
+'msg' => '数据库出错'
+)));
+}
+if (!mysqli_num_rows($result)) {
+die(json_encode(array(
+'code' => 901,
+'msg' => '暂无查询结果'
+)));
+}
+/**
+ * 增加收听人数
+ */
+function addListenNum($conn, $listen_num, $fileId)
+{
+$listen_num++;
+mysqli_query($conn, "UPDATE `copyrighted_music` SET `listen_num` = $listen_num WHERE `fileId` = '$fileId' LIMIT 1;");
+}
+// 判断数据库的下载连接是否过期
+while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC)) {
+$row['downloadUrl'] = 'http://123pan.ouyangpeng.top/FreePD/' . $row['fileName'];
+echo json_encode(array(
+'code' => 200,
+'msg' => '查询成功(缓存)',
+'result' => $row
+));
+addListenNum($conn, (int)($row['listen_num']), $fileId);
+// $url_update_time = (int)($row['url_update_time']);
+// if (time() - $url_update_time < $config['download_url_update_duration']) {
+//// 链接还在有效期内
+//echo json_encode(array(
+//'code' => 200,
+//'msg' => '查询成功(缓存)',
+//'result' => $row
+//));
+//addListenNum($conn, (int)($row['listen_num']), $fileId);
+// } else {
+//// 链接过期，重新获取
+//$options = array(
+//'http' => array(
+//'method' => 'POST',
+//'header' => "content-type: application/json\nauthorization: " . $config['123pan']['authorization'],
+//'content' => json_encode(array(
+//"driveId" => 0,
+//"etag" => $row['etag'],
+//"fileId" => $row['fileId'],
+//"s3keyFlag" => $row['s3keyFlag'],
+//"type" => 0,
+//"fileName" => $row['fileName'],
+//"size" => $row['size']
+//)),
+//'timeout' => 900
+//),
+//"ssl" => array(
+//"verify_peer" => false,
+//"verify_peer_name" => false,
+//)
+//);
+//$context = stream_context_create($options);
+//$result2 = file_get_contents('https://www.123pan.com/a/api/file/download_info', false, $context);
+//$download_url = json_decode($result2, true)['data']['DownloadUrl'];
+//if (!$download_url) {
+//die(json_encode(array(
+//'code' => 902,
+//'msg' => '服务器出错'
+//)));
+//}
+//// 更新数据库下载链接
+//$download_url = addslashes($download_url);
+//$result3 = mysqli_query($conn, "UPDATE `copyrighted_music` SET `downloadUrl` = '$download_url', `url_update_time` = " . time() . " WHERE `fileId` = '$fileId' LIMIT 1;");
+//if (!$result3) {
+//die(json_encode(array(
+//'code' => 903,
+//'msg' => '数据库出错，' . mysqli_error($conn)
+//)));
+//}
+//$row['downloadUrl'] = $download_url;
+//echo json_encode(array(
+//'code' => 200,
+//'msg' => '查询成功(非缓存)',
+//'result' => $row
+//));
+//addListenNum($conn, (int)($row['listen_num']), $fileId);
+// }
+}
+import json
+data = json.load(open('bin/data.good.min.json', 'r', encoding='utf-8'));
+types = []
+for i in data:
+if i['musicType'] not in types:
+types.append(i['musicType'])
+json.dump(types, open('bin/types.json', 'w', encoding='utf-8'))
+import json
+fromData = json.load(open('allData.json', 'r', encoding='utf-8'))
+toData = json.load(open('dataFront.json', 'r', encoding='utf-8'))
+data = []
+for i in fromData:
+try:
+title = i['FileName'].split('.mp3')[0]
+j = toData[title]
+i['musicType'] = j['musicType']
+i['msg'] = j['msg']
+i['time'] = j['time']
+data.append(i)
+except:
+pass
+json.dump(data, open('data.good.full.json', 'w', encoding='utf-8'))
+print('ok')
+.btn-mainColor {
+color: #fff;
+background-color: var(--mainColor);
+border-color: var(--mainColor);
+}
+.btn-mainColor:hover {
+color: #fff;
+background-color: #303069;
+border-color: #303069;
+}
+.btn-mainColor:focus {
+box-shadow: 0 0 0 0.2rem rgb(82 82 136 / 25%);
+}
+.form-control:focus {
+color: #495057;
+background-color: #fff;
+border-color: var(--mainColor);
+outline: 0;
+box-shadow: 0 0 0 0.2rem rgb(82 82 136 / 25%);
+}
+.border-mainColor {
+border-color: var(--mainColor) !important;
+}
+.text-mainColor {
+color: var(--mainColor);
+}
+.musicTypeList-item {
+display: flex;
+align-items: center;
+justify-content: center;
+height: 5rem;
+transition: background-color .5s, box-shadow .5s;
+}
+.musicTypeList-item:hover {
+background-color: var(--mainColor);
+outline: 0 !important;
+box-shadow: 0 0 0 0.2rem rgb(82 82 136 / 25%) !important;
+}
+.musicTypeList-item:hover * {
+color: white;
+}
+.musicTypeList-item h5 {
+font-size: 1.5rem;
+}
+.musicTypeList-item:hover .msg {
+display: none;
+}
+.musicTypeList-item:hover h5 {
+font-size: 2rem;
+}
+.musicTypeList-item:hover {
+background-color: var(--mainColor);
+color: white;
+}
+.musicList-item .msg {
+display: -webkit-box;
+-webkit-box-orient: vertical;
+-webkit-line-clamp: 3;
+overflow: hidden;
+}
+.cursor {
+cursor: pointer;
+}
+.cursor-warning:hover {
+color: var(--warning);
+}
+.cursor-mainColor:hover {
+color: var(--mainColor);
+}
+.aplayerBox {
+position: fixed;
+bottom: 0;
+left: 0;
+width: 100%;
+margin: 0;
+padding: 0;
+}
+#aplayer {
+margin: 0 auto;
+padding: 0;
+border: 1px solid var(--mainColor);
+border-top-left-radius: 1rem !important;
+border-top-right-radius: 1rem !important;
+/* box-shadow: 0 1rem 3rem rgba(238, 255, 0, 0.178) !important; */
+box-shadow: 0 0 3rem rgba(58, 124, 199, 0.336) !important;
+}
+.goDownloadMusicGood {
+transition: box-shadow .5s;
+position: fixed;
+right: 30px;
+bottom: 60px;
+box-shadow: 0 0rem .5rem rgba(58, 124, 199, 0.616) !important;
+border-color: #ffffff !important;
+color: dodgerblue !important;
+}
+.goDownloadMusicGood:hover {
+box-shadow: 0 0rem 1rem rgba(58, 124, 199, 0.616) !important;
+transition: box-shadow .2s;
+}
+.musicList .musicList-item {
+transition: background-color .5s;
+}
+.musicList .active {
+background-color: var(--mainColor);
+}
+.musicList .active * {
+color: white !important;
+}
+.border-mainColor {
+border-color: var(--mainColor);
+}
+<?php
+/**
+ * 
+ * 用户注册
+ */
+include './init_db.php';
+$username = defaultGetData('username', '');
+$password = defaultGetData('password', '');
+$email = defaultGetData('email', '');
+$verCode = defaultGetData('verCode', '');
+$register_time = time();
+if (!$username || !$password || !$email || !$verCode) {
+die(json_encode(array(
+'code' => 900,
+'msg' => '参数缺失'
+)));
+}
+// 判断用户有没有被注册过
+$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music_user` WHERE (`username` = '$username' OR `email` = '$email') LIMIT 1");
+if (mysqli_num_rows($result)) {
+// 已经被注册了
+die(json_encode(array(
+'code' => 904,
+'msg' => '用户名或邮箱已被注册'
+)));
+}
+// 判断验证码是否正确
+$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music_verCode` WHERE (`email` = '$email' AND `verCode` = '$verCode') LIMIT 1");
+if (!mysqli_num_rows($result)) {
+// 验证码错误
+die(json_encode(array(
+'code' => 905,
+'msg' => '验证码错误'
+)));
+}
+while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC)) {
+$create_time = (int)$row['create_time'];
+$limit_time = 10 * 60; // 验证码过期时间(s)
+if ((time() - $create_time) > $limit_time) {
+die(json_encode(array(
+'code' => 906,
+'msg' => '验证码过期'
+)));
+}
+break;
+}
+$result = mysqli_query($conn, "INSERT INTO `copyrighted_music_user` (`username`, `password`, `email`, `register_time`) VALUES ('$username', '$password', '$email', '$register_time')");
+if (!$result) {
+die(json_encode(array(
+'code' => 903,
+'msg' => '数据库出错'
+)));
+}
+// 注册成功，删除验证码
+mysqli_query($conn, "DELETE FROM `copyrighted_music_verCode` WHERE `email` = '$email' LIMIT 1");
+echo json_encode(array(
+'code' => 200,
+'msg' => '注册成功'
+));
+<?php
+/**
+ * 
+ * 获取验证码
+ */
+// 验证码用时间戳取md5后，打乱顺序，取前6个
+// 一旦验证成功，删除数据库数据
+// 提交邮箱生成验证码，如果该邮箱已经存在，判断创建时间到当前时间有没有超过60秒，有的话，更新数据，提示发送成功，没有的话，提示太频繁
+// 验证时，提交邮箱和验证码，数据库判断两者，如果找到匹配，再判断创建时间，有没有超过5分钟
+// 如果匹配失败，则提示验证码错误，如果过期，则提示验证码过期，如果正确，则提示正确并删除验证码
+include './init_db.php';
+include './sendCode.php';
+$email = defaultGetData('email', '');
+if (!$email) {
+die(json_encode(array(
+'code' => 900,
+'msg' => '参数缺失'
+)));
+}
+// 生成验证码
+$verCode = substr(str_shuffle(md5(time())), 0, 6);
+$content = '<div style="background-color: rgba(230, 230, 230, 0.5); border-radius: 20px; text-align: center; max-width: 500px; padding: 40px 20px; margin: auto; border: 1px solid rgba(140, 140, 140, 0.2); box-shadow: 2px 2px 5px rgba(140, 140, 140, 0.5);">
+<h1 style="margin: 0 auto 15px;">无忧音乐网</h1>
+<div style="font-size: 20px;">
+<div style="margin-bottom: 15px;">您的验证码是：<span style="color: blue; font-weight: bold;">' . $verCode . '</span></div>
+<div>有效期5分钟</div>
+</div>
+</div>';
+// 判断用户有没有被注册过
+$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music_user` WHERE `email` = '$email' LIMIT 1");
+if (mysqli_num_rows($result)) {
+// 已经被注册了
+die(json_encode(array(
+'code' => 904,
+'msg' => '邮箱已被注册'
+)));
+}
+// 查找数据库中是否已经有该邮箱验证码，并判断有没有超过60秒
+$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music_verCode` WHERE `email` = '$email' LIMIT 1");
+if (!mysqli_num_rows($result)) {
+// 数据库不存在该邮箱验证码数据，可以发送验证码
+$status = sendCode($config, $email, '无忧音乐网的验证码', $content);
+if (!$status) {
+die(json_encode(array(
+'code' => 908,
+'msg' => '验证码发送失败'
+)));
+}
+$create_time = time();
+$r = mysqli_query($conn, "INSERT INTO `copyrighted_music_verCode` (`email`, `verCode`, `create_time`) VALUES ('$email', '$verCode', '$create_time')");
+if ($r) {
+echo json_encode(array(
+'code' => 200,
+'msg' => '发送成功'
+));
+}
+} else {
+// 服务器存在验证码，判断有没有超过60秒
+while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC)) {
+$create_time = (int)$row['create_time'];
+if ((time() - $create_time) > 60) {
+// 时间超过60秒，可以再次发送了
+$status = sendCode($config, $email, '无忧音乐网的验证码', $content);
+if (!$status) {
+die(json_encode(array(
+'code' => 908,
+'msg' => '验证码发送失败'
+)));
+}
+$create_time = time();
+// 更新验证码和创建时间
+$r = mysqli_query($conn, "UPDATE `copyrighted_music_verCode` SET `create_time` = '$create_time', `verCode` = '$verCode' WHERE `email` = '$email' LIMIT 1");
+if ($r) {
+echo json_encode(array(
+'code' => 200,
+'msg' => '发送成功'
+));
+}
+} else {
+echo json_encode(array(
+'code' => 909,
+'msg' => '发送频率过快，请' . (60 - (time() - $create_time)) . '秒后重试'
+));
+}
+break;
+}
+}
+<?php
+/**
+ * 
+ * 用户登录
+ */
+include './init_db.php';
+$username = defaultGetData('username', '');
+$password = defaultGetData('password', '');
+if (!$username || !$password) {
+die(json_encode(array(
+'code' => 900,
+'msg' => '参数缺失'
+)));
+}
+$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music_user` WHERE (`username` = '$username' OR `email` = '$username') AND `password` = '$password' LIMIT 1");
+if (!mysqli_num_rows($result)) {
+die(json_encode(array(
+'code' => 907,
+'msg' => '账号或密码错误'
+)));
+}
+$data = array(
+'code' => 200,
+'msg' => '登录成功',
+'result' => array()
+);
+while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC)) {
+$data['result'] = $row;
+break;
+}
+echo json_encode($data);
+<?php
+/**
+ * 
+ * 获取文件下载链接
+ */
+include './init_db.php';
+function getData($key, $value)
+{
+if (array_key_exists($key, $_GET)) {
+return addslashes($_GET[$key] == null ? $value : $_GET[$key]);
+} else {
+return addslashes($value);
+}
+}
+$fileId = getData('fileId', '');
+// 判断参数是否缺失
+if (!$fileId) {
+die(json_encode(array(
+'code' => 900,
+'msg' => '参数缺失'
+)));
+}
+// 判断文件是否存在
+$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music` WHERE `fileId` = '$fileId' LIMIT 1;");
+if (!$result) {
+die(json_encode(array(
+'code' => 903,
+'msg' => '数据库出错'
+)));
+}
+if (!mysqli_num_rows($result)) {
+die(json_encode(array(
+'code' => 901,
+'msg' => '暂无查询结果'
+)));
+}
+/**
+ * 增加收听人数
+ */
+function addListenNum($conn, $listen_num, $fileId)
+{
+$listen_num++;
+mysqli_query($conn, "UPDATE `copyrighted_music` SET `listen_num` = $listen_num WHERE `fileId` = '$fileId' LIMIT 1;");
+}
+// 判断数据库的下载连接是否过期
+while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC)) {
+$row['downloadUrl'] = 'https://123pan.ouyangpeng.top/FreePD/' . $row['fileName'];
+echo json_encode(array(
+'code' => 200,
+'msg' => '查询成功(缓存)',
+'result' => $row
+));
+addListenNum($conn, (int)($row['listen_num']), $fileId);
+header('location: ' . $row['downloadUrl']);
+// $url_update_time = (int)($row['url_update_time']);
+// if (time() - $url_update_time < $config['download_url_update_duration']) {
+//// 链接还在有效期内
+//addListenNum($conn, (int)($row['listen_num']), $fileId);
+//header('location: ' . $row['downloadUrl']);
+// } else {
+//// 链接过期，重新获取
+//$options = array(
+//'http' => array(
+//'method' => 'POST',
+//'header' => "content-type: application/json\nauthorization: " . $config['123pan']['authorization'],
+//'content' => json_encode(array(
+//"driveId" => 0,
+//"etag" => $row['etag'],
+//"fileId" => $row['fileId'],
+//"s3keyFlag" => $row['s3keyFlag'],
+//"type" => 0,
+//"fileName" => $row['fileName'],
+//"size" => $row['size']
+//)),
+//'timeout' => 900
+//),
+//"ssl" => array(
+//"verify_peer" => false,
+//"verify_peer_name" => false,
+//)
+//);
+//$context = stream_context_create($options);
+//$result2 = file_get_contents('https://www.123pan.com/a/api/file/download_info', false, $context);
+//$download_url = json_decode($result2, true)['data']['DownloadUrl'];
+//if (!$download_url) {
+//die(json_encode(array(
+//'code' => 902,
+//'msg' => '服务器出错'
+//)));
+//}
+//// 更新数据库下载链接
+//$download_url = addslashes($download_url);
+//$result3 = mysqli_query($conn, "UPDATE `copyrighted_music` SET `downloadUrl` = '$download_url', `url_update_time` = " . time() . " WHERE `fileId` = '$fileId' LIMIT 1;");
+//if (!$result3) {
+//die(json_encode(array(
+//'code' => 903,
+//'msg' => '数据库出错，' . mysqli_error($conn)
+//)));
+//}
+//$row['downloadUrl'] = $download_url;
+//addListenNum($conn, (int)($row['listen_num']), $fileId);
+//header('location: ' . $row['downloadUrl']);
+// }
+}
 <!DOCTYPE html>
 <html>
 <head>
@@ -266,277 +835,6 @@ placeholder="请输入搜索关键词">
 <?php
 /**
  * 
- * 获取文件下载链接
- */
-include './init_db.php';
-function getData($key, $value)
-{
-if (array_key_exists($key, $_GET)) {
-return addslashes($_GET[$key] == null ? $value : $_GET[$key]);
-} else {
-return addslashes($value);
-}
-}
-$fileId = getData('fileId', '');
-// 判断参数是否缺失
-if (!$fileId) {
-die(json_encode(array(
-'code' => 900,
-'msg' => '参数缺失'
-)));
-}
-// 判断文件是否存在
-$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music` WHERE `fileId` = '$fileId' LIMIT 1;");
-if (!$result) {
-die(json_encode(array(
-'code' => 903,
-'msg' => '数据库出错'
-)));
-}
-if (!mysqli_num_rows($result)) {
-die(json_encode(array(
-'code' => 901,
-'msg' => '暂无查询结果'
-)));
-}
-/**
- * 增加收听人数
- */
-function addListenNum($conn, $listen_num, $fileId)
-{
-$listen_num++;
-mysqli_query($conn, "UPDATE `copyrighted_music` SET `listen_num` = $listen_num WHERE `fileId` = '$fileId' LIMIT 1;");
-}
-// 判断数据库的下载连接是否过期
-while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC)) {
-$row['downloadUrl'] = 'https://123pan.ouyangpeng.top/FreePD/' . $row['fileName'];
-echo json_encode(array(
-'code' => 200,
-'msg' => '查询成功(缓存)',
-'result' => $row
-));
-addListenNum($conn, (int)($row['listen_num']), $fileId);
-header('location: ' . $row['downloadUrl']);
-// $url_update_time = (int)($row['url_update_time']);
-// if (time() - $url_update_time < $config['download_url_update_duration']) {
-//// 链接还在有效期内
-//addListenNum($conn, (int)($row['listen_num']), $fileId);
-//header('location: ' . $row['downloadUrl']);
-// } else {
-//// 链接过期，重新获取
-//$options = array(
-//'http' => array(
-//'method' => 'POST',
-//'header' => "content-type: application/json\nauthorization: " . $config['123pan']['authorization'],
-//'content' => json_encode(array(
-//"driveId" => 0,
-//"etag" => $row['etag'],
-//"fileId" => $row['fileId'],
-//"s3keyFlag" => $row['s3keyFlag'],
-//"type" => 0,
-//"fileName" => $row['fileName'],
-//"size" => $row['size']
-//)),
-//'timeout' => 900
-//),
-//"ssl" => array(
-//"verify_peer" => false,
-//"verify_peer_name" => false,
-//)
-//);
-//$context = stream_context_create($options);
-//$result2 = file_get_contents('https://www.123pan.com/a/api/file/download_info', false, $context);
-//$download_url = json_decode($result2, true)['data']['DownloadUrl'];
-//if (!$download_url) {
-//die(json_encode(array(
-//'code' => 902,
-//'msg' => '服务器出错'
-//)));
-//}
-//// 更新数据库下载链接
-//$download_url = addslashes($download_url);
-//$result3 = mysqli_query($conn, "UPDATE `copyrighted_music` SET `downloadUrl` = '$download_url', `url_update_time` = " . time() . " WHERE `fileId` = '$fileId' LIMIT 1;");
-//if (!$result3) {
-//die(json_encode(array(
-//'code' => 903,
-//'msg' => '数据库出错，' . mysqli_error($conn)
-//)));
-//}
-//$row['downloadUrl'] = $download_url;
-//addListenNum($conn, (int)($row['listen_num']), $fileId);
-//header('location: ' . $row['downloadUrl']);
-// }
-}
-<?php
-/**
- * 
- * 获取验证码
- */
-// 验证码用时间戳取md5后，打乱顺序，取前6个
-// 一旦验证成功，删除数据库数据
-// 提交邮箱生成验证码，如果该邮箱已经存在，判断创建时间到当前时间有没有超过60秒，有的话，更新数据，提示发送成功，没有的话，提示太频繁
-// 验证时，提交邮箱和验证码，数据库判断两者，如果找到匹配，再判断创建时间，有没有超过5分钟
-// 如果匹配失败，则提示验证码错误，如果过期，则提示验证码过期，如果正确，则提示正确并删除验证码
-include './init_db.php';
-include './sendCode.php';
-$email = defaultGetData('email', '');
-if (!$email) {
-die(json_encode(array(
-'code' => 900,
-'msg' => '参数缺失'
-)));
-}
-// 生成验证码
-$verCode = substr(str_shuffle(md5(time())), 0, 6);
-$content = '<div style="background-color: rgba(230, 230, 230, 0.5); border-radius: 20px; text-align: center; max-width: 500px; padding: 40px 20px; margin: auto; border: 1px solid rgba(140, 140, 140, 0.2); box-shadow: 2px 2px 5px rgba(140, 140, 140, 0.5);">
-<h1 style="margin: 0 auto 15px;">无忧音乐网</h1>
-<div style="font-size: 20px;">
-<div style="margin-bottom: 15px;">您的验证码是：<span style="color: blue; font-weight: bold;">' . $verCode . '</span></div>
-<div>有效期5分钟</div>
-</div>
-</div>';
-// 判断用户有没有被注册过
-$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music_user` WHERE `email` = '$email' LIMIT 1");
-if (mysqli_num_rows($result)) {
-// 已经被注册了
-die(json_encode(array(
-'code' => 904,
-'msg' => '邮箱已被注册'
-)));
-}
-// 查找数据库中是否已经有该邮箱验证码，并判断有没有超过60秒
-$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music_verCode` WHERE `email` = '$email' LIMIT 1");
-if (!mysqli_num_rows($result)) {
-// 数据库不存在该邮箱验证码数据，可以发送验证码
-$status = sendCode($config, $email, '无忧音乐网的验证码', $content);
-if (!$status) {
-die(json_encode(array(
-'code' => 908,
-'msg' => '验证码发送失败'
-)));
-}
-$create_time = time();
-$r = mysqli_query($conn, "INSERT INTO `copyrighted_music_verCode` (`email`, `verCode`, `create_time`) VALUES ('$email', '$verCode', '$create_time')");
-if ($r) {
-echo json_encode(array(
-'code' => 200,
-'msg' => '发送成功'
-));
-}
-} else {
-// 服务器存在验证码，判断有没有超过60秒
-while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC)) {
-$create_time = (int)$row['create_time'];
-if ((time() - $create_time) > 60) {
-// 时间超过60秒，可以再次发送了
-$status = sendCode($config, $email, '无忧音乐网的验证码', $content);
-if (!$status) {
-die(json_encode(array(
-'code' => 908,
-'msg' => '验证码发送失败'
-)));
-}
-$create_time = time();
-// 更新验证码和创建时间
-$r = mysqli_query($conn, "UPDATE `copyrighted_music_verCode` SET `create_time` = '$create_time', `verCode` = '$verCode' WHERE `email` = '$email' LIMIT 1");
-if ($r) {
-echo json_encode(array(
-'code' => 200,
-'msg' => '发送成功'
-));
-}
-} else {
-echo json_encode(array(
-'code' => 909,
-'msg' => '发送频率过快，请' . (60 - (time() - $create_time)) . '秒后重试'
-));
-}
-break;
-}
-}
-<?php
-/**
- * 
- * 增加或删除收藏，向歌曲数据中添加用户名
- */
-include './init_db.php';
-$fileId = defaultGetData('fileId', '');
-$username = defaultGetData('username', '');
-$password = defaultGetData('password', '');
-if (!$username || !$password || !$fileId) {
-die(json_encode(array(
-'code' => 900,
-'msg' => '参数缺失'
-)));
-}
-$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music_user` WHERE (`username` = '$username' OR `email` = '$username') AND `password` = '$password' LIMIT 1");
-if (!mysqli_num_rows($result)) {
-die(json_encode(array(
-'code' => 907,
-'msg' => '账号或密码错误'
-)));
-}
-// 判断文件是否存在
-$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music` WHERE `fileId` = '$fileId' LIMIT 1;");
-if (!$result) {
-die(json_encode(array(
-'code' => 903,
-'msg' => '数据库出错'
-)));
-}
-if (!mysqli_num_rows($result)) {
-die(json_encode(array(
-'code' => 901,
-'msg' => '暂无查询结果'
-)));
-}
-while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC)) {
-$collect_userList = $row['collect_userList'];
-$collect_userList_data = explode(',', $collect_userList);
-$like_num = (int)$row['like_num'];
-// 判断用户是否已经收藏
-if (in_array($username, $collect_userList_data)) {
-// 用户已经收藏，取消收藏
-$collect_userList_data = array_diff($collect_userList_data, [$username]);
-$collect_userList = '';
-foreach ($collect_userList_data as $value) {
-if ($value) {
-$collect_userList .= ',' . $value;
-}
-}
-$order_type = 1;
-$like_num--;
-} else {
-// 用户未收藏，增加收藏
-$collect_userList .= ',' . $username;
-$order_type = 0;
-$like_num++;
-}
-$sql = "UPDATE `copyrighted_music` SET `collect_userList` = '$collect_userList', `like_num` = $like_num WHERE `fileId` = '$fileId';";
-$result2 = mysqli_query($conn, $sql);
-if (!$result2) {
-die(json_encode(array(
-'code' => 903,
-'msg' => '数据库出错'
-)));
-}
-if ($order_type) {
-echo json_encode(array(
-'code' => 200,
-'msg' => '取消收藏成功',
-'type' => $order_type
-));
-} else {
-echo json_encode(array(
-'code' => 200,
-'msg' => '收藏成功',
-'type' => $order_type
-));
-}
-}
-<?php
-/**
- * 
  * 初始化数据库连接
  */
 include './config.php';
@@ -568,13 +866,27 @@ $sql_createDB = "CREATE TABLE IF NOT EXISTS `copyrighted_music_verCode` (" .
 "`create_time` CHAR(10) comment \"创建时间\"," .
 "PRIMARY KEY (`id`)) ENGINE=InnoDB DEFAULT CHARSET=utf8;";
 mysqli_query($conn, $sql_createDB);
-import json
-data = json.load(open('bin/data.good.min.json', 'r', encoding='utf-8'));
-types = []
-for i in data:
-if i['musicType'] not in types:
-types.append(i['musicType'])
-json.dump(types, open('bin/types.json', 'w', encoding='utf-8'))
+<?php
+/**
+ * 输出音乐分类列表
+ * 可以通过 bin/获取分类名称列表.py 更新
+ */
+header('Content-type: application/json');
+header('Access-Control-Allow-Origin: *');
+$data = [
+["all", "全部"],
+["World Music", "世界"],
+["Comedy", "喜剧"],
+["Horror", "恐怖"],
+["upbeat", "乐观"],
+["epic", "史诗"],
+["Percussion / Underscoring", "冲击/强调"],
+["Romantic", "浪漫"],
+["Misc", "杂项"],
+["Electronic", "电子"],
+["Other", "其他"]
+];
+echo json_encode($data);
 <?php
 /**
  * 
@@ -608,264 +920,6 @@ $insert_sql = "INSERT INTO `copyrighted_music` (`fileName`, `size`, `fileId`, `e
 "VALUES ('". addslashes($item['fileName']) ."', '". addslashes($item['size']) ."', '". addslashes($item['fileId']) ."', '". addslashes($item['etag']) ."', '". addslashes($item['s3keyFlag']) ."', '". addslashes($item['type']) ."', '". addslashes($item['msg']) ."', '". addslashes($item['time']) ."', '". addslashes($item['downloadUrl']) ."', '". addslashes($item['musicType']) . "', ". (time() - 100000) .", 0, 0, '')";
 mysqli_query($conn, $insert_sql);
 }
-import json
-fromData = json.load(open('data.json', 'r', encoding='utf-8'))
-data = {}
-for i in fromData:
-data[i['title']] = i
-json.dump(data, open('dataFront.json', 'w', encoding='utf-8'))
-print('ok')
-<?php
-/**
- * 
- * 用户注册
- */
-include './init_db.php';
-$username = defaultGetData('username', '');
-$password = defaultGetData('password', '');
-$email = defaultGetData('email', '');
-$verCode = defaultGetData('verCode', '');
-$register_time = time();
-if (!$username || !$password || !$email || !$verCode) {
-die(json_encode(array(
-'code' => 900,
-'msg' => '参数缺失'
-)));
-}
-// 判断用户有没有被注册过
-$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music_user` WHERE (`username` = '$username' OR `email` = '$email') LIMIT 1");
-if (mysqli_num_rows($result)) {
-// 已经被注册了
-die(json_encode(array(
-'code' => 904,
-'msg' => '用户名或邮箱已被注册'
-)));
-}
-// 判断验证码是否正确
-$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music_verCode` WHERE (`email` = '$email' AND `verCode` = '$verCode') LIMIT 1");
-if (!mysqli_num_rows($result)) {
-// 验证码错误
-die(json_encode(array(
-'code' => 905,
-'msg' => '验证码错误'
-)));
-}
-while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC)) {
-$create_time = (int)$row['create_time'];
-$limit_time = 10 * 60; // 验证码过期时间(s)
-if ((time() - $create_time) > $limit_time) {
-die(json_encode(array(
-'code' => 906,
-'msg' => '验证码过期'
-)));
-}
-break;
-}
-$result = mysqli_query($conn, "INSERT INTO `copyrighted_music_user` (`username`, `password`, `email`, `register_time`) VALUES ('$username', '$password', '$email', '$register_time')");
-if (!$result) {
-die(json_encode(array(
-'code' => 903,
-'msg' => '数据库出错'
-)));
-}
-// 注册成功，删除验证码
-mysqli_query($conn, "DELETE FROM `copyrighted_music_verCode` WHERE `email` = '$email' LIMIT 1");
-echo json_encode(array(
-'code' => 200,
-'msg' => '注册成功'
-));
-<?php
-/**
- * 
- * 用户登录
- */
-include './init_db.php';
-$username = defaultGetData('username', '');
-$password = defaultGetData('password', '');
-if (!$username || !$password) {
-die(json_encode(array(
-'code' => 900,
-'msg' => '参数缺失'
-)));
-}
-$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music_user` WHERE (`username` = '$username' OR `email` = '$username') AND `password` = '$password' LIMIT 1");
-if (!mysqli_num_rows($result)) {
-die(json_encode(array(
-'code' => 907,
-'msg' => '账号或密码错误'
-)));
-}
-$data = array(
-'code' => 200,
-'msg' => '登录成功',
-'result' => array()
-);
-while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC)) {
-$data['result'] = $row;
-break;
-}
-echo json_encode($data);
-<?php
-/**
- * 
- * 获取文件下载链接
- */
-include './init_db.php';
-$fileId = defaultGetData('fileId', '');
-// 判断参数是否缺失
-if (!$fileId) {
-die(json_encode(array(
-'code' => 900,
-'msg' => '参数缺失'
-)));
-}
-// 判断文件是否存在
-$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music` WHERE `fileId` = '$fileId' LIMIT 1;");
-if (!$result) {
-die(json_encode(array(
-'code' => 903,
-'msg' => '数据库出错'
-)));
-}
-if (!mysqli_num_rows($result)) {
-die(json_encode(array(
-'code' => 901,
-'msg' => '暂无查询结果'
-)));
-}
-/**
- * 增加收听人数
- */
-function addListenNum($conn, $listen_num, $fileId)
-{
-$listen_num++;
-mysqli_query($conn, "UPDATE `copyrighted_music` SET `listen_num` = $listen_num WHERE `fileId` = '$fileId' LIMIT 1;");
-}
-// 判断数据库的下载连接是否过期
-while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC)) {
-$row['downloadUrl'] = 'http://123pan.ouyangpeng.top/FreePD/' . $row['fileName'];
-echo json_encode(array(
-'code' => 200,
-'msg' => '查询成功(缓存)',
-'result' => $row
-));
-addListenNum($conn, (int)($row['listen_num']), $fileId);
-// $url_update_time = (int)($row['url_update_time']);
-// if (time() - $url_update_time < $config['download_url_update_duration']) {
-//// 链接还在有效期内
-//echo json_encode(array(
-//'code' => 200,
-//'msg' => '查询成功(缓存)',
-//'result' => $row
-//));
-//addListenNum($conn, (int)($row['listen_num']), $fileId);
-// } else {
-//// 链接过期，重新获取
-//$options = array(
-//'http' => array(
-//'method' => 'POST',
-//'header' => "content-type: application/json\nauthorization: " . $config['123pan']['authorization'],
-//'content' => json_encode(array(
-//"driveId" => 0,
-//"etag" => $row['etag'],
-//"fileId" => $row['fileId'],
-//"s3keyFlag" => $row['s3keyFlag'],
-//"type" => 0,
-//"fileName" => $row['fileName'],
-//"size" => $row['size']
-//)),
-//'timeout' => 900
-//),
-//"ssl" => array(
-//"verify_peer" => false,
-//"verify_peer_name" => false,
-//)
-//);
-//$context = stream_context_create($options);
-//$result2 = file_get_contents('https://www.123pan.com/a/api/file/download_info', false, $context);
-//$download_url = json_decode($result2, true)['data']['DownloadUrl'];
-//if (!$download_url) {
-//die(json_encode(array(
-//'code' => 902,
-//'msg' => '服务器出错'
-//)));
-//}
-//// 更新数据库下载链接
-//$download_url = addslashes($download_url);
-//$result3 = mysqli_query($conn, "UPDATE `copyrighted_music` SET `downloadUrl` = '$download_url', `url_update_time` = " . time() . " WHERE `fileId` = '$fileId' LIMIT 1;");
-//if (!$result3) {
-//die(json_encode(array(
-//'code' => 903,
-//'msg' => '数据库出错，' . mysqli_error($conn)
-//)));
-//}
-//$row['downloadUrl'] = $download_url;
-//echo json_encode(array(
-//'code' => 200,
-//'msg' => '查询成功(非缓存)',
-//'result' => $row
-//));
-//addListenNum($conn, (int)($row['listen_num']), $fileId);
-// }
-}
-<?php
-/**
- * 
- * 获取用户收藏列表
- */
-include './init_db.php';
-$page = defaultGetData('page', 0);
-$pageSize = defaultGetData('pageSize', 30);
-$username = defaultGetData('username', '');
-$password = defaultGetData('password', '');
-$offset = $page * $pageSize;
-if (!$username || !$password) {
-die(json_encode(array(
-'code' => 900,
-'msg' => '参数缺失'
-)));
-}
-if ($username && $password) {
-$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music_user` WHERE (`username` = '$username' OR `email` = '$username') AND `password` = '$password' LIMIT 1");
-if (!mysqli_num_rows($result)) {
-die(json_encode(array(
-'code' => 907,
-'msg' => '账号或密码错误'
-)));
-}
-}
-$sql = "SELECT * FROM `copyrighted_music`;";
-$result = mysqli_query($conn, $sql);
-if (!$result) {
-die(json_encode(array(
-'code' => 903,
-'msg' => '数据库出错'
-)));
-}
-$data = array();
-while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC)) {
-$collect_userList = $row['collect_userList'];
-$collect_userList_data = explode(',', $collect_userList);
-// 判断用户是否已经收藏
-if (in_array($username, $collect_userList_data)) {
-array_push($data, $row);
-}
-}
-$cou = $offset + $pageSize;
-if ($cou > count($data)) {
-$cou = count($data);
-}
-$newData = array();
-for ($x = $offset; $x < $cou; $x++) {
-$data[$x]['hasLike'] = 1;
-unset($data[$x]['collect_userList']);
-array_push($newData, $data[$x]);
-}
-echo json_encode(array(
-'code' => 200,
-'mag' => '获取成功',
-'result' => $newData
-));
 <?php
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
@@ -906,348 +960,6 @@ return true;
 return false;
 }
 }
-import json
-data = []
-for i in range(1, 12):
-filename = 'files_json/p' + str(i) + '.txt'
-subData = json.load(
-open(filename, 'r', encoding='utf-8'))['data']['InfoList']
-for j in subData:
-data.append({
-'etag': j['Etag'],
-'fileId': j['FileId'],
-'downloadUrl': j['DownloadUrl'],
-'s3keyFlag': j['S3KeyFlag'],
-'type': j['Type'],
-'fileName': j['FileName'],
-'size': j['Size'],
-})
-json.dump(data, open('allData.min.json', 'w', encoding='utf-8'))
-print('ok')
-<?php
-/**
- * 输出音乐分类列表
- * 可以通过 bin/获取分类名称列表.py 更新
- */
-header('Content-type: application/json');
-header('Access-Control-Allow-Origin: *');
-$data = [
-["all", "全部"],
-["World Music", "世界"],
-["Comedy", "喜剧"],
-["Horror", "恐怖"],
-["upbeat", "乐观"],
-["epic", "史诗"],
-["Percussion / Underscoring", "冲击/强调"],
-["Romantic", "浪漫"],
-["Misc", "杂项"],
-["Electronic", "电子"],
-["Other", "其他"]
-];
-echo json_encode($data);
-<?php
-/**
- * 
- * 配置文件
- */
-header('Content-type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods:POST,GET,OPTIONS');
-header('Access-Control-Allow-Headers:Authorization,lpy');
-$config = array(
-'mysql' => array(
-'host' => 'localhost',
-'username' => 'root',
-'password' => '',
-'database' => 'ponconsoft'
-),
-'download_url_update_duration' => 5 * 60 * 60, // 下载链接有效期 (s),
-'123pan' => array(
-"username" => "", // 123云盘账号
-"password" => "" // 123云盘密码
-),
-'smtp' => array(
-'smtp_host' => 'smtp.163.com', // SMTP服务器
-'smtp_username' => '', // SMTP账号
-'smtp_password' => '', // SMTP密码
-'smtp_secure' => 'ssl', // 连接加密方法
-'smtp_port' => 994, // SMTP端口
-'sendFrom' => '', // 发件人邮箱
-'sendFromName' => '无忧音乐网' // 发件人名称
-)
-);
-$config['123pan']['authorization'] = get_authorization($config);
-function defaultGetData($key, $value)
-{
-if (array_key_exists($key, $_POST)) {
-return addslashes($_POST[$key] == null ? $value : $_POST[$key]);
-} else {
-return addslashes($value);
-}
-}
-function get_authorization($config)
-{
-$data = json_decode(file_get_contents('authorization.json'), true);
-$duration_hour = $data['duration_hour'];
-$update_time = $data['update_time'];
-if (time() - $update_time > $duration_hour * 60 * 60) {
-// 令牌过期 更新令牌
-$options = array(
-'http' => array(
-'method' => 'POST',
-'header' => "content-type: application/json",
-'content' => json_encode(array(
-"passport" => $config['123pan']['username'],
-"password" => $config['123pan']['password']
-)),
-'timeout' => 900
-),
-"ssl" => array(
-"verify_peer" => false,
-"verify_peer_name" => false,
-)
-);
-$context = stream_context_create($options);
-$result = file_get_contents('https://www.123pan.com/b/api/user/sign_in', false, $context);
-$authorization = 'Bearer ' . json_decode($result, true)['data']['token'];
-if ($authorization) {
-$data['authorization'] = $authorization;
-$data['update_time'] = time();
-file_put_contents('authorization.json', json_encode($data));
-}
-}
-return $data['authorization'];
-}
-.btn-mainColor {
-color: #fff;
-background-color: var(--mainColor);
-border-color: var(--mainColor);
-}
-.btn-mainColor:hover {
-color: #fff;
-background-color: #303069;
-border-color: #303069;
-}
-.btn-mainColor:focus {
-box-shadow: 0 0 0 0.2rem rgb(82 82 136 / 25%);
-}
-.form-control:focus {
-color: #495057;
-background-color: #fff;
-border-color: var(--mainColor);
-outline: 0;
-box-shadow: 0 0 0 0.2rem rgb(82 82 136 / 25%);
-}
-.border-mainColor {
-border-color: var(--mainColor) !important;
-}
-.text-mainColor {
-color: var(--mainColor);
-}
-.musicTypeList-item {
-display: flex;
-align-items: center;
-justify-content: center;
-height: 5rem;
-transition: background-color .5s, box-shadow .5s;
-}
-.musicTypeList-item:hover {
-background-color: var(--mainColor);
-outline: 0 !important;
-box-shadow: 0 0 0 0.2rem rgb(82 82 136 / 25%) !important;
-}
-.musicTypeList-item:hover * {
-color: white;
-}
-.musicTypeList-item h5 {
-font-size: 1.5rem;
-}
-.musicTypeList-item:hover .msg {
-display: none;
-}
-.musicTypeList-item:hover h5 {
-font-size: 2rem;
-}
-.musicTypeList-item:hover {
-background-color: var(--mainColor);
-color: white;
-}
-.musicList-item .msg {
-display: -webkit-box;
--webkit-box-orient: vertical;
--webkit-line-clamp: 3;
-overflow: hidden;
-}
-.cursor {
-cursor: pointer;
-}
-.cursor-warning:hover {
-color: var(--warning);
-}
-.cursor-mainColor:hover {
-color: var(--mainColor);
-}
-.aplayerBox {
-position: fixed;
-bottom: 0;
-left: 0;
-width: 100%;
-margin: 0;
-padding: 0;
-}
-#aplayer {
-margin: 0 auto;
-padding: 0;
-border: 1px solid var(--mainColor);
-border-top-left-radius: 1rem !important;
-border-top-right-radius: 1rem !important;
-/* box-shadow: 0 1rem 3rem rgba(238, 255, 0, 0.178) !important; */
-box-shadow: 0 0 3rem rgba(58, 124, 199, 0.336) !important;
-}
-.goDownloadMusicGood {
-transition: box-shadow .5s;
-position: fixed;
-right: 30px;
-bottom: 60px;
-box-shadow: 0 0rem .5rem rgba(58, 124, 199, 0.616) !important;
-border-color: #ffffff !important;
-color: dodgerblue !important;
-}
-.goDownloadMusicGood:hover {
-box-shadow: 0 0rem 1rem rgba(58, 124, 199, 0.616) !important;
-transition: box-shadow .2s;
-}
-.musicList .musicList-item {
-transition: background-color .5s;
-}
-.musicList .active {
-background-color: var(--mainColor);
-}
-.musicList .active * {
-color: white !important;
-}
-.border-mainColor {
-border-color: var(--mainColor);
-}
-<?php
-/**
- * 
- * 搜索音乐
- */
-include './init_db.php';
-$keyword = defaultGetData('keyword', '');
-$page = defaultGetData('page', 0);
-$pageSize = defaultGetData('pageSize', 30);
-$username = defaultGetData('username', '');
-$password = defaultGetData('password', '');
-$offset = $page * $pageSize;
-$keyword = addslashes($keyword);
-if (!$keyword) {
-die(json_encode(array(
-'code' => 900,
-'msg' => '参数缺失'
-)));
-}
-if ($username && $password) {
-$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music_user` WHERE (`username` = '$username' OR `email` = '$username') AND `password` = '$password' LIMIT 1");
-if (!mysqli_num_rows($result)) {
-die(json_encode(array(
-'code' => 907,
-'msg' => '账号或密码错误'
-)));
-}
-}
-$sql = "SELECT * FROM `copyrighted_music` WHERE `fileName` LIKE '%$keyword%' OR `fileId` LIKE '%$keyword%' ORDER BY `like_num` DESC LIMIT $pageSize OFFSET $offset;;";
-$result = mysqli_query($conn, $sql);
-if (!$result) {
-die(json_encode(array(
-'code' => 903,
-'msg' => '数据库出错'
-)));
-}
-$data = array('code' => 200, 'msg' => '查询成功', 'result' => array());
-$x = 0;
-while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC)) {
-$collect_userList = $row['collect_userList'];
-$collect_userList_data = explode(',', $collect_userList);
-if ($username && in_array($username, $collect_userList_data)) {
-$row['hasLike'] = 1; // 用户已收藏
-} else {
-$row['hasLike'] = 0; // 用户未收藏
-}
-unset($row['collect_userList']);
-$row['like_num'] = count($collect_userList_data) - 1;
-$data['result'][$x++] = $row;
-}
-echo json_encode($data);
-<?php
-/**
- * 
- * 获取音乐列表
- * 可根据分类筛选，按照页码和每页数量输出数据
- * 按照收听人数排序
- * 
- * 待优化：传入用户名，遍历音乐列表时，同时输出该歌曲用户是否收藏，前端发现用户已经收藏，则显示为星标
- */
-include './init_db.php';
-$type = defaultGetData('type', '');
-$page = defaultGetData('page', 0);
-$pageSize = defaultGetData('pageSize', 30);
-$username = defaultGetData('username', '');
-$password = defaultGetData('password', '');
-$offset = $page * $pageSize;
-if ($username && $password) {
-$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music_user` WHERE (`username` = '$username' OR `email` = '$username') AND `password` = '$password' LIMIT 1");
-if (!mysqli_num_rows($result)) {
-die(json_encode(array(
-'code' => 907,
-'msg' => '账号或密码错误'
-)));
-}
-}
-if ($type == 'all') {
-$sql = "SELECT * FROM `copyrighted_music` ORDER BY `listen_num` DESC LIMIT $pageSize OFFSET $offset;";
-} else {
-$sql = "SELECT * FROM `copyrighted_music` WHERE `musicType` LIKE '%$type%' ORDER BY `listen_num` DESC LIMIT $pageSize OFFSET $offset;";
-}
-$result = mysqli_query($conn, $sql);
-if (!$result) {
-die(json_encode(array(
-'code' => 903,
-'msg' => '数据库出错'
-)));
-}
-$data = array('code' => 200, 'msg' => '查询成功', 'result' => array());
-$x = 0;
-while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC)) {
-$collect_userList = $row['collect_userList'];
-$collect_userList_data = explode(',', $collect_userList);
-if ($username && in_array($username, $collect_userList_data)) {
-$row['hasLike'] = 1; // 用户已收藏
-} else {
-$row['hasLike'] = 0; // 用户未收藏
-}
-$row['like_num'] = count($collect_userList_data) - 1;
-unset($row['collect_userList']);
-$data['result'][$x++] = $row;
-}
-echo json_encode($data);
-import json
-fromData = json.load(open('allData.json', 'r', encoding='utf-8'))
-toData = json.load(open('dataFront.json', 'r', encoding='utf-8'))
-data = []
-for i in fromData:
-try:
-title = i['FileName'].split('.mp3')[0]
-j = toData[title]
-i['musicType'] = j['musicType']
-i['msg'] = j['msg']
-i['time'] = j['time']
-data.append(i)
-except:
-pass
-json.dump(data, open('data.good.full.json', 'w', encoding='utf-8'))
-print('ok')
 // 后端API基础路径 调用API时可引用该路径
 var baseUrl = ''
 if (location.hostname == 'localhost') {
@@ -1982,3 +1694,291 @@ $(".navbar button.navbar-toggler").click()
 }
 })
 })
+<?php
+/**
+ * 
+ * 增加或删除收藏，向歌曲数据中添加用户名
+ */
+include './init_db.php';
+$fileId = defaultGetData('fileId', '');
+$username = defaultGetData('username', '');
+$password = defaultGetData('password', '');
+if (!$username || !$password || !$fileId) {
+die(json_encode(array(
+'code' => 900,
+'msg' => '参数缺失'
+)));
+}
+$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music_user` WHERE (`username` = '$username' OR `email` = '$username') AND `password` = '$password' LIMIT 1");
+if (!mysqli_num_rows($result)) {
+die(json_encode(array(
+'code' => 907,
+'msg' => '账号或密码错误'
+)));
+}
+// 判断文件是否存在
+$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music` WHERE `fileId` = '$fileId' LIMIT 1;");
+if (!$result) {
+die(json_encode(array(
+'code' => 903,
+'msg' => '数据库出错'
+)));
+}
+if (!mysqli_num_rows($result)) {
+die(json_encode(array(
+'code' => 901,
+'msg' => '暂无查询结果'
+)));
+}
+while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC)) {
+$collect_userList = $row['collect_userList'];
+$collect_userList_data = explode(',', $collect_userList);
+$like_num = (int)$row['like_num'];
+// 判断用户是否已经收藏
+if (in_array($username, $collect_userList_data)) {
+// 用户已经收藏，取消收藏
+$collect_userList_data = array_diff($collect_userList_data, [$username]);
+$collect_userList = '';
+foreach ($collect_userList_data as $value) {
+if ($value) {
+$collect_userList .= ',' . $value;
+}
+}
+$order_type = 1;
+$like_num--;
+} else {
+// 用户未收藏，增加收藏
+$collect_userList .= ',' . $username;
+$order_type = 0;
+$like_num++;
+}
+$sql = "UPDATE `copyrighted_music` SET `collect_userList` = '$collect_userList', `like_num` = $like_num WHERE `fileId` = '$fileId';";
+$result2 = mysqli_query($conn, $sql);
+if (!$result2) {
+die(json_encode(array(
+'code' => 903,
+'msg' => '数据库出错'
+)));
+}
+if ($order_type) {
+echo json_encode(array(
+'code' => 200,
+'msg' => '取消收藏成功',
+'type' => $order_type
+));
+} else {
+echo json_encode(array(
+'code' => 200,
+'msg' => '收藏成功',
+'type' => $order_type
+));
+}
+}
+<?php
+/**
+ * 
+ * 获取音乐列表
+ * 可根据分类筛选，按照页码和每页数量输出数据
+ * 按照收听人数排序
+ * 
+ * 待优化：传入用户名，遍历音乐列表时，同时输出该歌曲用户是否收藏，前端发现用户已经收藏，则显示为星标
+ */
+include './init_db.php';
+$type = defaultGetData('type', '');
+$page = defaultGetData('page', 0);
+$pageSize = defaultGetData('pageSize', 30);
+$username = defaultGetData('username', '');
+$password = defaultGetData('password', '');
+$offset = $page * $pageSize;
+if ($username && $password) {
+$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music_user` WHERE (`username` = '$username' OR `email` = '$username') AND `password` = '$password' LIMIT 1");
+if (!mysqli_num_rows($result)) {
+die(json_encode(array(
+'code' => 907,
+'msg' => '账号或密码错误'
+)));
+}
+}
+if ($type == 'all') {
+$sql = "SELECT * FROM `copyrighted_music` ORDER BY `listen_num` DESC LIMIT $pageSize OFFSET $offset;";
+} else {
+$sql = "SELECT * FROM `copyrighted_music` WHERE `musicType` LIKE '%$type%' ORDER BY `listen_num` DESC LIMIT $pageSize OFFSET $offset;";
+}
+$result = mysqli_query($conn, $sql);
+if (!$result) {
+die(json_encode(array(
+'code' => 903,
+'msg' => '数据库出错'
+)));
+}
+$data = array('code' => 200, 'msg' => '查询成功', 'result' => array());
+$x = 0;
+while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC)) {
+$collect_userList = $row['collect_userList'];
+$collect_userList_data = explode(',', $collect_userList);
+if ($username && in_array($username, $collect_userList_data)) {
+$row['hasLike'] = 1; // 用户已收藏
+} else {
+$row['hasLike'] = 0; // 用户未收藏
+}
+$row['like_num'] = count($collect_userList_data) - 1;
+unset($row['collect_userList']);
+$data['result'][$x++] = $row;
+}
+echo json_encode($data);
+import json
+data = []
+for i in range(1, 12):
+filename = 'files_json/p' + str(i) + '.txt'
+subData = json.load(
+open(filename, 'r', encoding='utf-8'))['data']['InfoList']
+for j in subData:
+data.append({
+'etag': j['Etag'],
+'fileId': j['FileId'],
+'downloadUrl': j['DownloadUrl'],
+'s3keyFlag': j['S3KeyFlag'],
+'type': j['Type'],
+'fileName': j['FileName'],
+'size': j['Size'],
+})
+json.dump(data, open('allData.min.json', 'w', encoding='utf-8'))
+print('ok')
+import json
+fromData = json.load(open('data.json', 'r', encoding='utf-8'))
+data = {}
+for i in fromData:
+data[i['title']] = i
+json.dump(data, open('dataFront.json', 'w', encoding='utf-8'))
+print('ok')
+<?php
+/**
+ * 
+ * 配置文件
+ */
+header('Content-type: application/json');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods:POST,GET,OPTIONS');
+header('Access-Control-Allow-Headers:Authorization,lpy');
+$config = array(
+'mysql' => array(
+'host' => 'localhost',
+'username' => 'root',
+'password' => '',
+'database' => 'ponconsoft'
+),
+'download_url_update_duration' => 5 * 60 * 60, // 下载链接有效期 (s),
+'123pan' => array(
+"username" => "", // 123云盘账号
+"password" => "" // 123云盘密码
+),
+'smtp' => array(
+'smtp_host' => 'smtp.163.com', // SMTP服务器
+'smtp_username' => '', // SMTP账号
+'smtp_password' => '', // SMTP密码
+'smtp_secure' => 'ssl', // 连接加密方法
+'smtp_port' => 994, // SMTP端口
+'sendFrom' => '', // 发件人邮箱
+'sendFromName' => '无忧音乐网' // 发件人名称
+)
+);
+$config['123pan']['authorization'] = get_authorization($config);
+function defaultGetData($key, $value)
+{
+if (array_key_exists($key, $_POST)) {
+return addslashes($_POST[$key] == null ? $value : $_POST[$key]);
+} else {
+return addslashes($value);
+}
+}
+function get_authorization($config)
+{
+$data = json_decode(file_get_contents('authorization.json'), true);
+$duration_hour = $data['duration_hour'];
+$update_time = $data['update_time'];
+if (time() - $update_time > $duration_hour * 60 * 60) {
+// 令牌过期 更新令牌
+$options = array(
+'http' => array(
+'method' => 'POST',
+'header' => "content-type: application/json",
+'content' => json_encode(array(
+"passport" => $config['123pan']['username'],
+"password" => $config['123pan']['password']
+)),
+'timeout' => 900
+),
+"ssl" => array(
+"verify_peer" => false,
+"verify_peer_name" => false,
+)
+);
+$context = stream_context_create($options);
+$result = file_get_contents('https://www.123pan.com/b/api/user/sign_in', false, $context);
+$authorization = 'Bearer ' . json_decode($result, true)['data']['token'];
+if ($authorization) {
+$data['authorization'] = $authorization;
+$data['update_time'] = time();
+file_put_contents('authorization.json', json_encode($data));
+}
+}
+return $data['authorization'];
+}
+<?php
+/**
+ * 
+ * 获取用户收藏列表
+ */
+include './init_db.php';
+$page = defaultGetData('page', 0);
+$pageSize = defaultGetData('pageSize', 30);
+$username = defaultGetData('username', '');
+$password = defaultGetData('password', '');
+$offset = $page * $pageSize;
+if (!$username || !$password) {
+die(json_encode(array(
+'code' => 900,
+'msg' => '参数缺失'
+)));
+}
+if ($username && $password) {
+$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music_user` WHERE (`username` = '$username' OR `email` = '$username') AND `password` = '$password' LIMIT 1");
+if (!mysqli_num_rows($result)) {
+die(json_encode(array(
+'code' => 907,
+'msg' => '账号或密码错误'
+)));
+}
+}
+$sql = "SELECT * FROM `copyrighted_music`;";
+$result = mysqli_query($conn, $sql);
+if (!$result) {
+die(json_encode(array(
+'code' => 903,
+'msg' => '数据库出错'
+)));
+}
+$data = array();
+while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC)) {
+$collect_userList = $row['collect_userList'];
+$collect_userList_data = explode(',', $collect_userList);
+// 判断用户是否已经收藏
+if (in_array($username, $collect_userList_data)) {
+array_push($data, $row);
+}
+}
+$cou = $offset + $pageSize;
+if ($cou > count($data)) {
+$cou = count($data);
+}
+$newData = array();
+for ($x = $offset; $x < $cou; $x++) {
+$data[$x]['hasLike'] = 1;
+unset($data[$x]['collect_userList']);
+array_push($newData, $data[$x]);
+}
+echo json_encode(array(
+'code' => 200,
+'mag' => '获取成功',
+'result' => $newData
+));
