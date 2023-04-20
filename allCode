@@ -1,1984 +1,695 @@
-<?php
+(function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
+"use strict";
+exports.__esModule = true;
+var poncon_1 = require("../../src/poncon");
+var poncon = new poncon_1["default"]();
+poncon.setPageList(['home', 'about']);
+poncon.start();
+},{"../../src/poncon":2}],2:[function(require,module,exports){
+"use strict";
+exports.__esModule = true;
 /**
- * 
- * 搜索音乐
+ * @author 欧阳鹏
+ * https://apee.top
  */
-include './init_db.php';
-$keyword = defaultGetData('keyword', '');
-$page = defaultGetData('page', 0);
-$pageSize = defaultGetData('pageSize', 30);
-$username = defaultGetData('username', '');
-$password = defaultGetData('password', '');
-$offset = $page * $pageSize;
-$keyword = addslashes($keyword);
-if (!$keyword) {
-die(json_encode(array(
-'code' => 900,
-'msg' => '参数缺失'
-)));
-}
-if ($username && $password) {
-$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music_user` WHERE (`username` = '$username' OR `email` = '$username') AND `password` = '$password' LIMIT 1");
-if (!mysqli_num_rows($result)) {
-die(json_encode(array(
-'code' => 907,
-'msg' => '账号或密码错误'
-)));
-}
-}
-$sql = "SELECT * FROM `copyrighted_music` WHERE `fileName` LIKE '%$keyword%' OR `fileId` LIKE '%$keyword%' ORDER BY `like_num` DESC LIMIT $pageSize OFFSET $offset;;";
-$result = mysqli_query($conn, $sql);
-if (!$result) {
-die(json_encode(array(
-'code' => 903,
-'msg' => '数据库出错'
-)));
-}
-$data = array('code' => 200, 'msg' => '查询成功', 'result' => array());
-$x = 0;
-while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC)) {
-$collect_userList = $row['collect_userList'];
-$collect_userList_data = explode(',', $collect_userList);
-if ($username && in_array($username, $collect_userList_data)) {
-$row['hasLike'] = 1; // 用户已收藏
-} else {
-$row['hasLike'] = 0; // 用户未收藏
-}
-unset($row['collect_userList']);
-$row['like_num'] = count($collect_userList_data) - 1;
-$data['result'][$x++] = $row;
-}
-echo json_encode($data);
-<?php
-/**
- * 
- * 获取文件下载链接
- */
-include './init_db.php';
-$fileId = defaultGetData('fileId', '');
-// 判断参数是否缺失
-if (!$fileId) {
-die(json_encode(array(
-'code' => 900,
-'msg' => '参数缺失'
-)));
-}
-// 判断文件是否存在
-$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music` WHERE `fileId` = '$fileId' LIMIT 1;");
-if (!$result) {
-die(json_encode(array(
-'code' => 903,
-'msg' => '数据库出错'
-)));
-}
-if (!mysqli_num_rows($result)) {
-die(json_encode(array(
-'code' => 901,
-'msg' => '暂无查询结果'
-)));
+var Poncon = /** @class */ (function () {
+function Poncon() {
+this.pages = {};
+this.pageNames = []; // 页面列表
 }
 /**
- * 增加收听人数
- */
-function addListenNum($conn, $listen_num, $fileId)
-{
-$listen_num++;
-mysqli_query($conn, "UPDATE `copyrighted_music` SET `listen_num` = $listen_num WHERE `fileId` = '$fileId' LIMIT 1;");
+* 切换页面显示
+* @param target 页面标识
+*/
+Poncon.prototype.changeView = function (target) {
+if (!target) {
+return;
 }
-// 判断数据库的下载连接是否过期
-while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC)) {
-$row['downloadUrl'] = 'http://123pan.ouyangpeng.top/FreePD/' . $row['fileName'];
-echo json_encode(array(
-'code' => 200,
-'msg' => '查询成功(缓存)',
-'result' => $row
-));
-addListenNum($conn, (int)($row['listen_num']), $fileId);
-// $url_update_time = (int)($row['url_update_time']);
-// if (time() - $url_update_time < $config['download_url_update_duration']) {
-//// 链接还在有效期内
-//echo json_encode(array(
-//'code' => 200,
-//'msg' => '查询成功(缓存)',
-//'result' => $row
-//));
-//addListenNum($conn, (int)($row['listen_num']), $fileId);
-// } else {
-//// 链接过期，重新获取
-//$options = array(
-//'http' => array(
-//'method' => 'POST',
-//'header' => "content-type: application/json\nauthorization: " . $config['123pan']['authorization'],
-//'content' => json_encode(array(
-//"driveId" => 0,
-//"etag" => $row['etag'],
-//"fileId" => $row['fileId'],
-//"s3keyFlag" => $row['s3keyFlag'],
-//"type" => 0,
-//"fileName" => $row['fileName'],
-//"size" => $row['size']
-//)),
-//'timeout' => 900
-//),
-//"ssl" => array(
-//"verify_peer" => false,
-//"verify_peer_name" => false,
-//)
-//);
-//$context = stream_context_create($options);
-//$result2 = file_get_contents('https://www.123pan.com/a/api/file/download_info', false, $context);
-//$download_url = json_decode($result2, true)['data']['DownloadUrl'];
-//if (!$download_url) {
-//die(json_encode(array(
-//'code' => 902,
-//'msg' => '服务器出错'
-//)));
-//}
-//// 更新数据库下载链接
-//$download_url = addslashes($download_url);
-//$result3 = mysqli_query($conn, "UPDATE `copyrighted_music` SET `downloadUrl` = '$download_url', `url_update_time` = " . time() . " WHERE `fileId` = '$fileId' LIMIT 1;");
-//if (!$result3) {
-//die(json_encode(array(
-//'code' => 903,
-//'msg' => '数据库出错，' . mysqli_error($conn)
-//)));
-//}
-//$row['downloadUrl'] = $download_url;
-//echo json_encode(array(
-//'code' => 200,
-//'msg' => '查询成功(非缓存)',
-//'result' => $row
-//));
-//addListenNum($conn, (int)($row['listen_num']), $fileId);
-// }
-}
-import json
-data = json.load(open('bin/data.good.min.json', 'r', encoding='utf-8'));
-types = []
-for i in data:
-if i['musicType'] not in types:
-types.append(i['musicType'])
-json.dump(types, open('bin/types.json', 'w', encoding='utf-8'))
-import json
-fromData = json.load(open('allData.json', 'r', encoding='utf-8'))
-toData = json.load(open('dataFront.json', 'r', encoding='utf-8'))
-data = []
-for i in fromData:
-try:
-title = i['FileName'].split('.mp3')[0]
-j = toData[title]
-i['musicType'] = j['musicType']
-i['msg'] = j['msg']
-i['time'] = j['time']
-data.append(i)
-except:
-pass
-json.dump(data, open('data.good.full.json', 'w', encoding='utf-8'))
-print('ok')
-.btn-mainColor {
-color: #fff;
-background-color: var(--mainColor);
-border-color: var(--mainColor);
-}
-.btn-mainColor:hover {
-color: #fff;
-background-color: #303069;
-border-color: #303069;
-}
-.btn-mainColor:focus {
-box-shadow: 0 0 0 0.2rem rgb(82 82 136 / 25%);
-}
-.form-control:focus {
-color: #495057;
-background-color: #fff;
-border-color: var(--mainColor);
-outline: 0;
-box-shadow: 0 0 0 0.2rem rgb(82 82 136 / 25%);
-}
-.border-mainColor {
-border-color: var(--mainColor) !important;
-}
-.text-mainColor {
-color: var(--mainColor);
-}
-.musicTypeList-item {
-display: flex;
-align-items: center;
-justify-content: center;
-height: 5rem;
-transition: background-color .5s, box-shadow .5s;
-}
-.musicTypeList-item:hover {
-background-color: var(--mainColor);
-outline: 0 !important;
-box-shadow: 0 0 0 0.2rem rgb(82 82 136 / 25%) !important;
-}
-.musicTypeList-item:hover * {
-color: white;
-}
-.musicTypeList-item h5 {
-font-size: 1.5rem;
-}
-.musicTypeList-item:hover .msg {
-display: none;
-}
-.musicTypeList-item:hover h5 {
-font-size: 2rem;
-}
-.musicTypeList-item:hover {
-background-color: var(--mainColor);
-color: white;
-}
-.musicList-item .msg {
-display: -webkit-box;
--webkit-box-orient: vertical;
--webkit-line-clamp: 3;
-overflow: hidden;
-}
-.cursor {
-cursor: pointer;
-}
-.cursor-warning:hover {
-color: var(--warning);
-}
-.cursor-mainColor:hover {
-color: var(--mainColor);
-}
-.aplayerBox {
-position: fixed;
-bottom: 0;
-left: 0;
-width: 100%;
-margin: 0;
-padding: 0;
-}
-#aplayer {
-margin: 0 auto;
-padding: 0;
-border: 1px solid var(--mainColor);
-border-top-left-radius: 1rem !important;
-border-top-right-radius: 1rem !important;
-/* box-shadow: 0 1rem 3rem rgba(238, 255, 0, 0.178) !important; */
-box-shadow: 0 0 3rem rgba(58, 124, 199, 0.336) !important;
-}
-.goDownloadMusicGood {
-transition: box-shadow .5s;
-position: fixed;
-right: 30px;
-bottom: 60px;
-box-shadow: 0 0rem .5rem rgba(58, 124, 199, 0.616) !important;
-border-color: #ffffff !important;
-color: dodgerblue !important;
-}
-.goDownloadMusicGood:hover {
-box-shadow: 0 0rem 1rem rgba(58, 124, 199, 0.616) !important;
-transition: box-shadow .2s;
-}
-.musicList .musicList-item {
-transition: background-color .5s;
-}
-.musicList .active {
-background-color: var(--mainColor);
-}
-.musicList .active * {
-color: white !important;
-}
-.border-mainColor {
-border-color: var(--mainColor);
-}
-<?php
+document.querySelectorAll('.poncon-page').forEach(function (dom) {
+dom.style.display = 'none';
+});
+var dom = document.querySelector(".poncon-".concat(target));
+dom.style.display = '';
+};
 /**
- * 
- * 用户注册
- */
-include './init_db.php';
-$username = defaultGetData('username', '');
-$password = defaultGetData('password', '');
-$email = defaultGetData('email', '');
-$verCode = defaultGetData('verCode', '');
-$register_time = time();
-if (!$username || !$password || !$email || !$verCode) {
-die(json_encode(array(
-'code' => 900,
-'msg' => '参数缺失'
-)));
-}
-// 判断用户有没有被注册过
-$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music_user` WHERE (`username` = '$username' OR `email` = '$email') LIMIT 1");
-if (mysqli_num_rows($result)) {
-// 已经被注册了
-die(json_encode(array(
-'code' => 904,
-'msg' => '用户名或邮箱已被注册'
-)));
-}
-// 判断验证码是否正确
-$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music_verCode` WHERE (`email` = '$email' AND `verCode` = '$verCode') LIMIT 1");
-if (!mysqli_num_rows($result)) {
-// 验证码错误
-die(json_encode(array(
-'code' => 905,
-'msg' => '验证码错误'
-)));
-}
-while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC)) {
-$create_time = (int)$row['create_time'];
-$limit_time = 10 * 60; // 验证码过期时间(s)
-if ((time() - $create_time) > $limit_time) {
-die(json_encode(array(
-'code' => 906,
-'msg' => '验证码过期'
-)));
-}
-break;
-}
-$result = mysqli_query($conn, "INSERT INTO `copyrighted_music_user` (`username`, `password`, `email`, `register_time`) VALUES ('$username', '$password', '$email', '$register_time')");
-if (!$result) {
-die(json_encode(array(
-'code' => 903,
-'msg' => '数据库出错'
-)));
-}
-// 注册成功，删除验证码
-mysqli_query($conn, "DELETE FROM `copyrighted_music_verCode` WHERE `email` = '$email' LIMIT 1");
-echo json_encode(array(
-'code' => 200,
-'msg' => '注册成功'
-));
-<?php
+* 设置页面名称列表
+* @param pageNames 页面名称列表
+*/
+Poncon.prototype.setPageList = function (pageNames) {
+var _this_1 = this;
+pageNames.forEach(function (target) {
+var dom = document.querySelector(".poncon-".concat(target));
+_this_1.pages[target] = {
+dom: dom,
+event: (function () { })
+};
+});
+this.pageNames = pageNames;
+};
 /**
- * 
- * 获取验证码
- */
-// 验证码用时间戳取md5后，打乱顺序，取前6个
-// 一旦验证成功，删除数据库数据
-// 提交邮箱生成验证码，如果该邮箱已经存在，判断创建时间到当前时间有没有超过60秒，有的话，更新数据，提示发送成功，没有的话，提示太频繁
-// 验证时，提交邮箱和验证码，数据库判断两者，如果找到匹配，再判断创建时间，有没有超过5分钟
-// 如果匹配失败，则提示验证码错误，如果过期，则提示验证码过期，如果正确，则提示正确并删除验证码
-include './init_db.php';
-include './sendCode.php';
-$email = defaultGetData('email', '');
-if (!$email) {
-die(json_encode(array(
-'code' => 900,
-'msg' => '参数缺失'
-)));
+* 配置页面
+* @param target 页面标识
+* @param func 页面载入事件
+*/
+Poncon.prototype.setPage = function (target, func) {
+if (!target) {
+return;
 }
-// 生成验证码
-$verCode = substr(str_shuffle(md5(time())), 0, 6);
-$content = '<div style="background-color: rgba(230, 230, 230, 0.5); border-radius: 20px; text-align: center; max-width: 500px; padding: 40px 20px; margin: auto; border: 1px solid rgba(140, 140, 140, 0.2); box-shadow: 2px 2px 5px rgba(140, 140, 140, 0.5);">
-<h1 style="margin: 0 auto 15px;">无忧音乐网</h1>
-<div style="font-size: 20px;">
-<div style="margin-bottom: 15px;">您的验证码是：<span style="color: blue; font-weight: bold;">' . $verCode . '</span></div>
-<div>有效期5分钟</div>
-</div>
-</div>';
-// 判断用户有没有被注册过
-$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music_user` WHERE `email` = '$email' LIMIT 1");
-if (mysqli_num_rows($result)) {
-// 已经被注册了
-die(json_encode(array(
-'code' => 904,
-'msg' => '邮箱已被注册'
-)));
-}
-// 查找数据库中是否已经有该邮箱验证码，并判断有没有超过60秒
-$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music_verCode` WHERE `email` = '$email' LIMIT 1");
-if (!mysqli_num_rows($result)) {
-// 数据库不存在该邮箱验证码数据，可以发送验证码
-$status = sendCode($config, $email, '无忧音乐网的验证码', $content);
-if (!$status) {
-die(json_encode(array(
-'code' => 908,
-'msg' => '验证码发送失败'
-)));
-}
-$create_time = time();
-$r = mysqli_query($conn, "INSERT INTO `copyrighted_music_verCode` (`email`, `verCode`, `create_time`) VALUES ('$email', '$verCode', '$create_time')");
-if ($r) {
-echo json_encode(array(
-'code' => 200,
-'msg' => '发送成功'
-));
-}
-} else {
-// 服务器存在验证码，判断有没有超过60秒
-while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC)) {
-$create_time = (int)$row['create_time'];
-if ((time() - $create_time) > 60) {
-// 时间超过60秒，可以再次发送了
-$status = sendCode($config, $email, '无忧音乐网的验证码', $content);
-if (!$status) {
-die(json_encode(array(
-'code' => 908,
-'msg' => '验证码发送失败'
-)));
-}
-$create_time = time();
-// 更新验证码和创建时间
-$r = mysqli_query($conn, "UPDATE `copyrighted_music_verCode` SET `create_time` = '$create_time', `verCode` = '$verCode' WHERE `email` = '$email' LIMIT 1");
-if ($r) {
-echo json_encode(array(
-'code' => 200,
-'msg' => '发送成功'
-));
-}
-} else {
-echo json_encode(array(
-'code' => 909,
-'msg' => '发送频率过快，请' . (60 - (time() - $create_time)) . '秒后重试'
-));
-}
-break;
-}
-}
-<?php
+var dom = document.querySelector(".poncon-".concat(target));
+this.pages[target] = {
+dom: dom,
+event: func || (function () { })
+};
+};
 /**
- * 
- * 用户登录
- */
-include './init_db.php';
-$username = defaultGetData('username', '');
-$password = defaultGetData('password', '');
-if (!$username || !$password) {
-die(json_encode(array(
-'code' => 900,
-'msg' => '参数缺失'
-)));
-}
-$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music_user` WHERE (`username` = '$username' OR `email` = '$username') AND `password` = '$password' LIMIT 1");
-if (!mysqli_num_rows($result)) {
-die(json_encode(array(
-'code' => 907,
-'msg' => '账号或密码错误'
-)));
-}
-$data = array(
-'code' => 200,
-'msg' => '登录成功',
-'result' => array()
-);
-while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC)) {
-$data['result'] = $row;
-break;
-}
-echo json_encode($data);
-<?php
+* 开启路由系统
+*/
+Poncon.prototype.start = function () {
+var _this = this;
+window.addEventListener('hashchange', function (event) {
+var hash = new URL(event.newURL).hash;
+_this.loadTarget(hash);
+});
+this.loadTarget();
+};
 /**
- * 
- * 获取文件下载链接
- */
-include './init_db.php';
-function getData($key, $value)
-{
-if (array_key_exists($key, $_GET)) {
-return addslashes($_GET[$key] == null ? $value : $_GET[$key]);
-} else {
-return addslashes($value);
-}
-}
-$fileId = getData('fileId', '');
-// 判断参数是否缺失
-if (!$fileId) {
-die(json_encode(array(
-'code' => 900,
-'msg' => '参数缺失'
-)));
-}
-// 判断文件是否存在
-$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music` WHERE `fileId` = '$fileId' LIMIT 1;");
-if (!$result) {
-die(json_encode(array(
-'code' => 903,
-'msg' => '数据库出错'
-)));
-}
-if (!mysqli_num_rows($result)) {
-die(json_encode(array(
-'code' => 901,
-'msg' => '暂无查询结果'
-)));
-}
+* 切换页面并执行页面事件
+* @param hash 页面标识
+*/
+Poncon.prototype.loadTarget = function (hash) {
+var target = this.getTarget(hash);
+var dom = this.getDom(target);
+var args = this.getArgs(hash);
+this.changeView(target);
+this.pages[target].event(target, dom, args);
+};
 /**
- * 增加收听人数
- */
-function addListenNum($conn, $listen_num, $fileId)
-{
-$listen_num++;
-mysqli_query($conn, "UPDATE `copyrighted_music` SET `listen_num` = $listen_num WHERE `fileId` = '$fileId' LIMIT 1;");
+* 获取页面参数列表
+* @param hash 网址Hash
+* @returns 页面参数列表
+*/
+Poncon.prototype.getArgs = function (hash) {
+var strs = (hash || location.hash).split('/');
+if (strs.length < 3) {
+return [];
 }
-// 判断数据库的下载连接是否过期
-while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC)) {
-$row['downloadUrl'] = 'https://123pan.ouyangpeng.top/FreePD/' . $row['fileName'];
-echo json_encode(array(
-'code' => 200,
-'msg' => '查询成功(缓存)',
-'result' => $row
-));
-addListenNum($conn, (int)($row['listen_num']), $fileId);
-header('location: ' . $row['downloadUrl']);
-// $url_update_time = (int)($row['url_update_time']);
-// if (time() - $url_update_time < $config['download_url_update_duration']) {
-//// 链接还在有效期内
-//addListenNum($conn, (int)($row['listen_num']), $fileId);
-//header('location: ' . $row['downloadUrl']);
-// } else {
-//// 链接过期，重新获取
-//$options = array(
-//'http' => array(
-//'method' => 'POST',
-//'header' => "content-type: application/json\nauthorization: " . $config['123pan']['authorization'],
-//'content' => json_encode(array(
-//"driveId" => 0,
-//"etag" => $row['etag'],
-//"fileId" => $row['fileId'],
-//"s3keyFlag" => $row['s3keyFlag'],
-//"type" => 0,
-//"fileName" => $row['fileName'],
-//"size" => $row['size']
-//)),
-//'timeout' => 900
-//),
-//"ssl" => array(
-//"verify_peer" => false,
-//"verify_peer_name" => false,
-//)
-//);
-//$context = stream_context_create($options);
-//$result2 = file_get_contents('https://www.123pan.com/a/api/file/download_info', false, $context);
-//$download_url = json_decode($result2, true)['data']['DownloadUrl'];
-//if (!$download_url) {
-//die(json_encode(array(
-//'code' => 902,
-//'msg' => '服务器出错'
-//)));
-//}
-//// 更新数据库下载链接
-//$download_url = addslashes($download_url);
-//$result3 = mysqli_query($conn, "UPDATE `copyrighted_music` SET `downloadUrl` = '$download_url', `url_update_time` = " . time() . " WHERE `fileId` = '$fileId' LIMIT 1;");
-//if (!$result3) {
-//die(json_encode(array(
-//'code' => 903,
-//'msg' => '数据库出错，' . mysqli_error($conn)
-//)));
-//}
-//$row['downloadUrl'] = $download_url;
-//addListenNum($conn, (int)($row['listen_num']), $fileId);
-//header('location: ' . $row['downloadUrl']);
-// }
+return strs.slice(2);
+};
+/**
+* 获取当前页面标识, 支持自动矫正
+* @param hash 网址hash
+* @returns 页面标识
+*/
+Poncon.prototype.getTarget = function (hash) {
+var strs = (hash || location.hash).split('/');
+var target = strs[1] || '';
+// target不合法或者不在白名单
+if (target.search(/^\w+$/) != 0 || this.pageNames.indexOf(target) == -1) {
+history.replaceState({}, '', "".concat(location.pathname));
+return 'home';
 }
+return target;
+};
+/**
+* 获取页面DOM
+* @param target 页面标识
+* @returns 页面DOM元素
+*/
+Poncon.prototype.getDom = function (target) {
+return document.querySelector(".poncon-".concat(target));
+};
+return Poncon;
+}());
+exports["default"] = Poncon;
+},{}]},{},[1]);
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>无忧音乐网</title>
-<meta name="description" content="无忧音乐网，分享海量免费音乐，提供试听和下载。">
-<link rel="stylesheet" href="css/bootstrap.min.css" />
-<link rel="stylesheet" href="css/bootstrap-icons.min.css">
+<title>Typescript + Browserify 示例</title>
 <style>
-:root {
---mainColor: #525288;
+.page {
+padding: 30px;
+margin: 10px;
+border: 1px solid #666666;
+background-color: blanchedalmond;
+border-radius: 15px;
 }
-.page-oyp {
-display: none
+.page h1 {
+margin-top: 0px;
+margin-bottom: 40px;
+font-size: 40px;
+}
+.page a.active {
+color: white;
+background-color: dimgray;
+}
+.page a {
+font-size: 30px;
+padding: 10px 20px;
+border-radius: 10px;
+margin-right: 20px;
+cursor: pointer;
+background-color: cornsilk;
+text-decoration: none;
+color: black;
 }
 </style>
-<script src="js/jquery.min.js"></script>
-<script src="js/bootstrap.bundle.min.js"></script>
-<script src="js/md5.min.js"></script>
-<script src="js/clipboard.min.js"></script>
-<link rel="stylesheet" href="css/APlayer.min.css">
-<script src="js/APlayer.min.js"></script>
-<link rel="stylesheet" href="css/index.css?v=1651964085011">
-<script src="js/index.min.js?v=1651964085011"></script>
 </head>
-<body style="display: none;" class="user-select-none text-break">
-<nav class="navbar navbar-expand-sm navbar-dark fixed-top" style="background-color: #525288;">
-<a class="navbar-brand" onclick="location.hash = '/home/'">无忧音乐网</a>
-<button class="navbar-toggler" data-toggle="collapse" data-target="#navbarSupportedContent">
-<span class="navbar-toggler-icon"></span>
-</button>
-<div class="collapse navbar-collapse" id="navbarSupportedContent">
-<ul class="navbar-nav mr-auto">
-<li class="nav-item active nav-item-home">
-<a class="nav-link" onclick="location.hash = '/home/'"><span>主页</span></a>
-</li>
-<li class="nav-item nav-item-search">
-<a class="nav-link" onclick="location.hash = '/search/'"><span>音乐搜索</span></a>
-</li>
-<li class="nav-item nav-item-user">
-<a class="nav-link" onclick="location.hash = '/user/'"><span>我的收藏</span></a>
-</li>
-<li class="nav-item nav-item-about">
-<a class="nav-link" onclick="location.hash = '/about/'"><span>关于</span></a>
-</li>
-</ul>
-<ul class="navbar-nav">
-<li class="nav-item active nav-item-login" style="display: none;">
-<a class="nav-link" onclick="location.hash = '/login/'"><span>注册/登录</span></a>
-</li>
-<li class="nav-item nav-item-logout" style="display: none;">
-<a class="nav-link"><span>退出登录</span></a>
-</li>
-</ul>
-</div>
-</nav>
-<div class="container container-main py-sm-3 py-3" style="margin-top: 65px; margin-bottom: 80px;">
-<div class="page-home page-oyp">
-<h3 class="mb-4"><span class="bi bi bi-code-square mr-2"></span>音乐分类</h3>
-<div class="row musicTypeList"></div>
-<h3 class="mb-4"><span class="bi bi-star mr-2"></span>热门音乐</h3>
-<div class="row musicList"></div>
-</div>
-<div class="page-musicList page-oyp">
-<nav class="mb-4">
-<ol class="breadcrumb">
-<li class="breadcrumb-item"><a href="#/home/"
-onclick="location.hash = '/home/'; return false;">主页</a></li>
-<li class="breadcrumb-item active"></li>
-</ol>
-</nav>
-<div class="row musicList"></div>
-<div class="loading mt-4 mb-3 text-center" style="height: 50px; display: none;">
-<div class="spinner-border text-mainColor" role="status">
-<span class="sr-only">Loading...</span>
+<body>
+<h1>Typescript + Browserify 示例</h1>
+<div class="poncon-home poncon-page" style="display: none;">
+<div class="page">
+<h1>这里是主页</h1>
+<a href="#" class="active">#/home</a>
+<a href="#/about">#/about</a>
 </div>
 </div>
-<div class="loadMore mt-4 row mb-3" style="height: 50px;">
-<div class="col-6 col-md-5 col-lg-4 m-auto">
-<button class="btn btn-mainColor btn-block">加载更多</button>
+<div class="poncon-about poncon-page" style="display: none;">
+<div class="page">
+<h1>这里是关于页</h1>
+<a href="#">#/home</a>
+<a href="#/about" class="active">#/about</a>
 </div>
 </div>
-</div>
-<div class="page-about page-oyp">
-<h3 class="mb-4 mt-2">关于本站</h3>
-<div class="mb-4">
-<div class="mb-2">这是一个分享海量免费音乐，提供在线试听和下载的网站，音乐版权归原作者所有，如果侵犯到您的权益，请联系本站删除。</div>
-</div>
-<div class="mb-4">
-<strong class="mb-3 d-block text-info">项目信息</strong>
-<ul class="mb-0">
-<li class="mb-2">开发时间：2022年5月8日</li>
-<li class="mb-2">开发者：鹏优创网络工作室</li>
-<li class="mb-2">官网：<a href="https://www.ouyangpeng.top" target="_blank">ouyangpeng.top</a></li>
-</ul>
-</div>
-<div class="mb-4">
-<strong class="mb-3 d-block text-info">联系我们</strong>
-<ul class="mb-4">
-<li class="mb-2">E-mail：<a href="mailto:ponconsoft@gmail.com"
-target="_blank">ponconsoft@gmail.com</a>
-</li>
-<li class="mb-2">QQ交流群：<a href="https://jq.qq.com/?_wv=1027&amp;k=PQuZNehB"
-target="_blank">1085954565</a></li>
-</ul>
-</div>
-<div class="mb-4">
-<strong class="d-block text-info">捐赠</strong>
-<img src="https://p.ananas.chaoxing.com/star3/origin/84847d0d2572057b10ed5574ad358891.png"
-referrerpolicy="no-referrer" style="max-width: 200px;" />
-</div>
-</div>
-<div class="page-login page-oyp">
-<div class="row mt-2">
-<div class="col-xl-5 col-lg-6 col-md-8 col-sm-11 mx-auto">
-<h3 class="mb-4 text-center title"></h3>
-<div class="page-sub-login page-oyp">
-<div class="input-group mb-4">
-<div class="input-group-prepend">
-<span class="input-group-text">用户名</span>
-</div>
-<input type="text" class="form-control input-username" autocomplete="new-password"
-placeholder="请输入用户名/邮箱">
-</div>
-<div class="input-group mb-4">
-<div class="input-group-prepend">
-<span class="input-group-text">密码</span>
-</div>
-<input type="password" autocomplete="new-password" class="form-control input-password"
-placeholder="请输入密码">
-</div>
-<div class="row mb-4">
-<div class="col">
-<button class="btn btn-mainColor btn-block login">登录</button>
-</div>
-<div class="col">
-<button class="btn btn-light border btn-block reset">重置</button>
-</div>
-</div>
-<div class="msg text-center mb-4">
-没有账号？<a href="'#/login/register/'"
-onclick="location.hash = '/login/register/'; return false;">点此注册</a>
-</div>
-</div>
-<div class="page-sub-register page-oyp">
-<div class="input-group mb-4">
-<div class="input-group-prepend">
-<span class="input-group-text">用户名</span>
-</div>
-<input type="text" class="form-control input-username" autocomplete="new-password"
-placeholder="请输入用户名">
-</div>
-<div class="input-group mb-4">
-<div class="input-group-prepend">
-<span class="input-group-text">邮箱</span>
-</div>
-<input type="email" class="form-control input-email" autocomplete="new-password"
-placeholder="请输入邮箱">
-</div>
-<div class="input-group mb-4">
-<div class="input-group-prepend">
-<span class="input-group-text">密码</span>
-</div>
-<input type="password" autocomplete="new-password" class="form-control input-password"
-placeholder="请输入密码">
-</div>
-<div class="input-group mb-4">
-<div class="input-group-prepend">
-<span class="input-group-text">重复</span>
-</div>
-<input type="password" autocomplete="new-password" class="form-control input-password2"
-placeholder="请再次输入密码">
-</div>
-<div class="input-group mb-4">
-<div class="input-group-prepend">
-<span class="input-group-text">验证码</span>
-</div>
-<input type="text" autocomplete="new-password" class="form-control input-verCode"
-placeholder="请输入验证码">
-<div class="input-group-append">
-<button class="btn btn-secondary getVerCode">获取验证码</button>
-</div>
-</div>
-<div class="row mb-4">
-<div class="col">
-<button class="btn btn-mainColor btn-block register">注册</button>
-</div>
-<div class="col">
-<button class="btn btn-light border btn-block reset">重置</button>
-</div>
-</div>
-<div class="msg text-center mb-4">
-已有账号？<a href="'#/login/'" onclick="location.hash = '/login/'; return false;">点此登录</a>
-</div>
-</div>
-</div>
-</div>
-</div>
-<div class="page-search page-oyp">
-<div class="row mt-2">
-<div class="col-xl-5 col-lg-6 col-md-8 col-sm-11 mx-auto">
-<h3 class="mb-4 text-center title">音乐搜索</h3>
-<div class="input-group mb-4">
-<input type="search" class="form-control keyword border-mainColor" autocomplete="new-password"
-placeholder="请输入搜索关键词">
-<div class="input-group-append">
-<button class="btn btn-mainColor search">搜索</button>
-</div>
-</div>
-</div>
-</div>
-<div class="row musicList"></div>
-<div class="loading mt-4 mb-3 text-center" style="height: 50px; display: none;">
-<div class="spinner-border text-mainColor" role="status">
-<span class="sr-only">Loading...</span>
-</div>
-</div>
-<div class="loadMore mt-4 row mb-3" style="height: 50px; display: none;">
-<div class="col-6 col-md-5 col-lg-4 m-auto">
-<button class="btn btn-mainColor btn-block">加载更多</button>
-</div>
-</div>
-</div>
-<div class="page-user page-oyp">
-<h3 class="mb-4"><span class="bi bi-star-fill mr-2"></span>我的收藏</h3>
-<div class="row musicList"></div>
-<div class="loading mt-4 mb-3 text-center" style="height: 50px; display: none;">
-<div class="spinner-border text-mainColor" role="status">
-<span class="sr-only">Loading...</span>
-</div>
-</div>
-<div class="loadMore mt-4 row mb-3" style="height: 50px;">
-<div class="col-6 col-md-5 col-lg-4 m-auto">
-<button class="btn btn-mainColor btn-block">加载更多</button>
-</div>
-</div>
-</div>
-<div class="aplayerBox" style="display: none;">
-<div id="aplayer" class="container"></div>
-</div>
-<span class="btn-tool goDownloadMusicGood bg-white rounded p-2 border" style="display: none;">
-<span class="bi bi-download"></span>
-下载
-</span>
-</div>
-<div class="download_iframes" style="display: none;"></div>
-<div class="modal modal-msg" tabindex="-1">
-<div class="modal-dialog modal-dialog-centered">
-<div class="modal-content">
-<div class="modal-header">
-<h5 class="modal-title">提示</h5>
-<button type="button" class="close" data-dismiss="modal" aria-label="Close">
-<span aria-hidden="true">&times;</span>
-</button>
-</div>
-<div class="modal-body">
-音乐即将下载，请稍后。
-</div>
-</div>
-</div>
-</div>
+<script src="./bundle.min.js"></script>
 </body>
 </html>
-<?php
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>script 标签直接引入示例</title>
+<style>
+.page {
+padding: 30px;
+margin: 10px;
+border: 1px solid #666666;
+background-color: blanchedalmond;
+border-radius: 15px;
+}
+.page h1 {
+margin-top: 0px;
+margin-bottom: 40px;
+font-size: 40px;
+}
+.page a.active {
+color: white;
+background-color: dimgray;
+}
+.page a {
+font-size: 30px;
+padding: 10px 20px;
+border-radius: 10px;
+margin-right: 20px;
+cursor: pointer;
+background-color: cornsilk;
+text-decoration: none;
+color: black;
+}
+</style>
+</head>
+<body>
+<h1>script 标签直接引入示例</h1>
+<div class="poncon-home poncon-page" style="display: none;">
+<div class="page">
+<h1>这里是主页</h1>
+<a href="#" class="active">#/home</a>
+<a href="#/about">#/about</a>
+</div>
+</div>
+<div class="poncon-about poncon-page" style="display: none;">
+<div class="page">
+<h1>这里是关于页</h1>
+<a href="#">#/home</a>
+<a href="#/about" class="active">#/about</a>
+</div>
+</div>
+<script src="../../dist/poncon.min.js"></script>
+<script>
+const poncon = new Poncon()
+poncon.setPageList(['home', 'about'])
+poncon.start()
+</script>
+</body>
+</html>
+const { execSync } = require('child_process')
+const fs = require('fs')
+// 编译 TS
+execSync('tsc')
+// 读取编译后的 JS
+const jsCodeStr = fs.readFileSync('src/poncon.js').toString()
+// 去除模块化代码
+const newCodeStr = jsCodeStr.replace(/^exports[.\[].*/gm, '')
+// 写入新的 JS 文件
+if (!fs.existsSync('dist')) {
+fs.mkdirSync('dist')
+}
+fs.writeFileSync('dist/poncon.js', newCodeStr)
+// UglifyJS 处理
+execSync('uglifyjs dist/poncon.js -m -c -o dist/poncon.min.js')
+"use strict";var Poncon=function(){function t(){this.pages={},this.pageNames=[]}return t.prototype.changeView=function(t){t&&(document.querySelectorAll(".poncon-page").forEach(function(t){t.style.display="none"}),document.querySelector(".poncon-".concat(t)).style.display="")},t.prototype.setPageList=function(t){var n=this;t.forEach(function(t){var e=document.querySelector(".poncon-".concat(t));n.pages[t]={dom:e,event:function(){},data:{}}}),this.pageNames=t},t.prototype.setPage=function(t,e){t&&(this.pages[t].event=e||function(){})},t.prototype.start=function(){var e=this;window.addEventListener("hashchange",function(t){t=new URL(t.newURL).hash;e.loadTarget(t)}),this.loadTarget()},t.prototype.loadTarget=function(t){var e=this.getTarget(t),n=this.getDom(e),t=this.getArgs(t);this.changeView(e),this.pages[e].event(n,t,this.pages[e].data)},t.prototype.getArgs=function(t){t=(t||location.hash).split("/");return t.length<3?[]:t.slice(2)},t.prototype.getTarget=function(t){t=(t||location.hash).split("/")[1]||"";return 0!=t.search(/^\w+$/)||-1==this.pageNames.indexOf(t)?(history.replaceState({},"","".concat(location.pathname)),"home"):t},t.prototype.getDom=function(t){return document.querySelector(".poncon-".concat(t))},t}();
+"use strict";
+exports.__esModule = true;
 /**
- * 
- * 初始化数据库连接
+ * @author 欧阳鹏
+ * https://apee.top
  */
-include './config.php';
-$conn = mysqli_connect(
-$config['mysql']['host'],
-$config['mysql']['username'],
-$config['mysql']['password'],
-$config['mysql']['database']
-);
-if (!$conn) {
-die(json_encode(array(
-'code' => 903,
-'msg' => '数据库连接失败'
-)));
-}
-// 空间大小以KB为单位，用户不分等级，容量越买越多
-$sql_createDB = "CREATE TABLE IF NOT EXISTS `copyrighted_music_user` (" .
-"`id` int(10) NOT NULL AUTO_INCREMENT," .
-"`username` TEXT comment \"用户名\"," .
-"`password` TEXT comment \"密码\"," .
-"`email` TEXT comment \"邮箱\"," .
-"`register_time` CHAR(10) comment \"注册时间\"," .
-"PRIMARY KEY (`id`)) ENGINE=InnoDB DEFAULT CHARSET=utf8;";
-mysqli_query($conn, $sql_createDB);
-$sql_createDB = "CREATE TABLE IF NOT EXISTS `copyrighted_music_verCode` (" .
-"`id` int(10) NOT NULL AUTO_INCREMENT," .
-"`verCode` CHAR(6) comment \"验证码\"," .
-"`email` TEXT comment \"邮箱\"," .
-"`create_time` CHAR(10) comment \"创建时间\"," .
-"PRIMARY KEY (`id`)) ENGINE=InnoDB DEFAULT CHARSET=utf8;";
-mysqli_query($conn, $sql_createDB);
-<?php
-/**
- * 输出音乐分类列表
- * 可以通过 bin/获取分类名称列表.py 更新
- */
-header('Content-type: application/json');
-header('Access-Control-Allow-Origin: *');
-$data = [
-["all", "全部"],
-["World Music", "世界"],
-["Comedy", "喜剧"],
-["Horror", "恐怖"],
-["upbeat", "乐观"],
-["epic", "史诗"],
-["Percussion / Underscoring", "冲击/强调"],
-["Romantic", "浪漫"],
-["Misc", "杂项"],
-["Electronic", "电子"],
-["Other", "其他"]
-];
-echo json_encode($data);
-<?php
-/**
- * 
- * 把云盘列表数据和原站采集的数据合并后插入到数据表中
- */
-$config = json_decode(file_get_contents('./config.json'), true);
-$mysql = $config['mysql'];
-$conn = mysqli_connect($mysql['host'], $mysql['username'], $mysql['password'], $mysql['database']);
-$fromData = json_decode(file_get_contents('./data.good.min.json'), true);
-$createTB_sql = "CREATE TABLE IF NOT EXISTS `copyrighted_music` (" .
-"`id` int(10) NOT NULL AUTO_INCREMENT," .
-"`fileName` TEXT comment \"文件名称\"," .
-"`size` TEXT comment \"文件大小\"," .
-"`fileId` TEXT comment \"文件ID\"," .
-"`etag` TEXT comment \"文件标识\"," .
-"`s3keyFlag` TEXT," .
-"`type` TEXT," .
-"`msg` TEXT comment \"音乐介绍\"," .
-"`time` TEXT comment \"音频时长\"," .
-"`downloadUrl` TEXT comment \"下载链接\"," .
-"`musicType` TEXT comment \"音乐类型\"," .
-"`url_update_time` INT(10) comment \"链接更新时间\"," .
-"`like_num` INT(10) comment \"点赞人数\"," .
-"`listen_num` INT(10) comment \"收听人数\"," .
-"`collect_userList` TEXT comment \"收藏用户列表\"," .
-"PRIMARY KEY (`id`)) ENGINE=InnoDB DEFAULT CHARSET=utf8;";
-mysqli_query($conn, $createTB_sql);
-for ($x = 0; $x < count($fromData); $x++) {
-$item = $fromData[$x];
-$insert_sql = "INSERT INTO `copyrighted_music` (`fileName`, `size`, `fileId`, `etag`, `s3keyFlag`, `type`, `msg`, `time`, `downloadUrl`, `musicType`, `url_update_time`, `like_num`, `listen_num`, `collect_userList`)" .
-"VALUES ('". addslashes($item['fileName']) ."', '". addslashes($item['size']) ."', '". addslashes($item['fileId']) ."', '". addslashes($item['etag']) ."', '". addslashes($item['s3keyFlag']) ."', '". addslashes($item['type']) ."', '". addslashes($item['msg']) ."', '". addslashes($item['time']) ."', '". addslashes($item['downloadUrl']) ."', '". addslashes($item['musicType']) . "', ". (time() - 100000) .", 0, 0, '')";
-mysqli_query($conn, $insert_sql);
-}
-<?php
-use PHPMailer\PHPMailer\PHPMailer;
-use PHPMailer\PHPMailer\Exception;
-require './PHPMailer/Exception.php';
-require './PHPMailer/PHPMailer.php';
-require './PHPMailer/SMTP.php';
-function sendCode($config, $address, $title, $content)
-{
-$mail = new PHPMailer(true); // Passing `true` enables exceptions
-try {
-//服务器配置
-$mail->CharSet = "UTF-8"; //设定邮件编码
-$mail->SMTPDebug = 0; // 调试模式输出
-$mail->isSMTP(); // 使用SMTP
-$mail->Host = $config['smtp']['smtp_host']; // SMTP服务器
-$mail->SMTPAuth = true; // 允许 SMTP 认证
-$mail->Username = $config['smtp']['smtp_username']; // SMTP 用户名 即邮箱的用户名
-$mail->Password = $config['smtp']['smtp_password']; // SMTP 密码 部分邮箱是授权码(例如163邮箱)
-$mail->SMTPSecure = $config['smtp']['smtp_secure']; // 允许 TLS 或者ssl协议
-$mail->Port = $config['smtp']['smtp_port']; // 服务器端口 25 或者465 具体要看邮箱服务器支持
-$mail->setFrom($config['smtp']['sendFrom'], $config['smtp']['sendFromName']); //发件人
-$mail->addAddress($address, '用户'); // 收件人
-//$mail->addAddress('ellen@example.com'); // 可添加多个收件人
-$mail->addReplyTo($config['smtp']['sendFrom'], $config['smtp']['sendFromName']); //回复的时候回复给哪个邮箱 建议和发件人一致
-//$mail->addCC('cc@example.com'); //抄送
-//$mail->addBCC('bcc@example.com'); //密送
-//发送附件
-// $mail->addAttachment('../xy.zip'); // 添加附件
-// $mail->addAttachment('../thumb-1.jpg', 'new.jpg'); // 发送附件并且重命名
-//Content
-$mail->isHTML(true); // 是否以HTML文档格式发送发送后客户端可直接显示对应HTML内容
-$mail->Subject = $title; // 主体
-$mail->Body = $content; // 内容(HTML)
-$mail->AltBody = $content; // 如果邮件客户端不支持HTML则显示此内容
-$mail->send();
-return true;
-} catch (Exception $e) {
-return false;
-}
-}
-// 后端API基础路径 调用API时可引用该路径
-var baseUrl = ''
-if (location.hostname == 'localhost') {
-var baseUrl = 'http://web.app.ouyangpeng.top/poncon-copyrighted-music/'
-}
-var webTitle = '无忧音乐网 - 海量无版权音乐共享'
-var userLoginDataKeyName = 'copyrighted_music_UserLoginData'
-var UserHasLogin = 0 // 用户已经登录？
-// var nowLoadMusicType = '' // 当前加载的音乐列表类型
-var nowFileId = '' // 当前播放音乐的文件ID
-var nowPlayIndex = 0 // 当前播放的音乐在列表中的序号
-var request_updateFileList
-= request_getFileInfo
-= request_playMusic
-= request_addLike
-= request_secrahMusic
-= $.ajax()
-// 不重复加载的Ajax数据
-var neverLoad_getTypeList = 0
-// 播放器
-var ap
-/**
- * 加载音乐播放器，播放音乐
- * @param {string} fileId 音乐文件ID
- */
-function playMusic_v1(fileId, ele) {
-if (nowFileId == fileId) {
-return
-}
-nowFileId = fileId
-request_playMusic.abort()
-request_playMusic = $.ajax({
-method: 'post',
-url: baseUrl + 'api/getMusicInfo.php',
-data: {
-fileId: fileId
-},
-contentType: 'application/x-www-form-urlencoded',
-dataType: 'json',
-success: function (data) {
-if (data.code == 200) {
-ele = $(ele).parent().find('span.listen_num')
-ele.html(parseInt(ele.text()) + 1)
-$('.aplayerBox, .goDownloadMusicGood').show().css('position', 'fixed')
-ap = new APlayer({
-container: document.getElementById('aplayer'),
-audio: [{
-name: data.result.fileName.replace(/(.*).mp3$/, '$1'),
-artist: '无忧音乐网',
-url: data.result.downloadUrl,
-cover: 'img/music.jpg',
-theme: '#525288'
-}]
-})
-ap.play()
-} else {
-alert(data.msg)
-}
-}
-})
+var Poncon = /** @class */ (function () {
+function Poncon() {
+this.pages = {};
+this.pageNames = []; // 页面列表
 }
 /**
- * 播放音乐，支持播放列表
- * @param {int} index 当前点击的卡片在当前播放列表中的序号
- * @param {object} ele 当前播放列表的DOM对象 .musicList
- */
-function playMusic(index, ele) {
-var eles = ele.find('.musicList-item')
-var audio = []
-var fileId = $(eles[index]).data('fileid')
-if (nowFileId == fileId) {
-return
-}
-nowFileId = fileId
-nowPlayIndex = index
-for (var i = 0; i < eles.length; i++) {
-var ele_item = $(eles[i])
-audio.push({
-name: ele_item.find('h5').text(),
-artist: '无忧音乐网',
-url: baseUrl + 'api/playMusic.php?fileId=' + ele_item.data('fileid'),
-cover: 'img/music.jpg',
-theme: '#525288'
-})
-}
-var now_ele = ele.find('.musicList-item')[index]
-ele_listen_num = $(now_ele).find('span.listen_num')
-ele_listen_num.html(parseInt(ele_listen_num.text()) + 1)
-$('.aplayerBox, .goDownloadMusicGood').show().css('position', 'fixed')
-ap = new APlayer({
-listFolded: $('.aplayer-list').css('height') == '0px' || !$('.aplayer-list').css('height'),
-container: document.getElementById('aplayer'),
-audio: audio
-})
-ap.list.switch(index)
-ap.play()
-ap.on('listswitch', function (e) {
-var index = e.index
-nowPlayIndex = index
-var fileId = $(eles[index]).data('fileid')
-nowFileId = fileId
-var now_ele = ele.find('.musicList-item')[index]
-ele_listen_num = $(now_ele).find('span.listen_num')
-ele_listen_num.html(parseInt(ele_listen_num.text()) + 1)
-$('.musicList .active').removeClass('active')
-$('.musicList .file-' + nowFileId).addClass('active')
-// console.log($(eles[index]))
-})
-ap.on('listshow', function () {
-$('.container-main').css('margin-bottom', '205px')
-})
-ap.on('listhide', function () {
-$('.container-main').css('margin-bottom', '80px')
-})
-}
-/**
- * 获取用户信息
- * @param {string} keyName 当前应用程序存储数据的键名
- * @returns 获得的值
- */
-function getUserInfo(keyName) {
-try {
-var userdata = JSON.parse(localStorage[userLoginDataKeyName])
-return userdata[keyName]
-} catch (error) {
-return null
-}
-}
-function getListHtml(list) {
-for (var i = 0, html = ''; i < list.length; i++) {
-if (list[i].hasLike) {
-var html_like = '<span class="addLike cursor cursor-warning text-warning" data-haslike="1">\
-<span class="bi bi bi-star-fill"></span>\
-<span class="like_num">' + list[i].like_num + '</span>\
-</span>'
-} else {
-var html_like = '<span class="addLike cursor cursor-warning" data-haslike="0">\
-<span class="bi bi bi-star"></span>\
-<span class="like_num">' + list[i].like_num + '</span>\
-</span>'
-}
-html += '<div class="col-xl-3 col-lg-4 col-md-6 mb-4">\
-<div class="p-3 rounded shadow border h-100 musicList-item file-' + list[i].fileId + '" data-fileid="' + list[i].fileId + '">\
-<h5 class="pb-2 mb-0 text-mainColor cursor">' + list[i].fileName.replace(/(.*).mp3$/, '$1') + '</h5>\
-<div class="msg text-muted cursor small mb-2">' + list[i].msg + '</div>\
-<div class="text-info small mb-2">#' + list[i].musicType + '</div>\
-<div class="text-nowrap overflow-hidden">\
-<span class="bi bi-headphones"></span>\
-<span class="listen_num mr-3 mr-sm-2">' + list[i].listen_num + '</span>\
-<span class="bi bi-filetype-mp3"></span>\
-<span class="fileSize mr-3 mr-sm-2">' + fileSize(list[i].size) + '</span>\
-' + html_like + '\
-</div>\
-</div>\
-</div>'
-}
-return html
-}
-/**
- * 加载音乐列表
- * @param {string} type 音乐类型
- * @param {int} page 页码
- * @param {int} pageSize 每页加载数量
- */
-function loadMusicList(type, page, pageSize) {
-if (page == 0) {
-$('.page-musicList .musicList').html('')
-}
-$('.page-musicList .loadMore').hide()
-$('.page-musicList .loading').show()
-$('.page-musicList .loadMore button').show()
-$.ajax({
-method: 'post',
-url: baseUrl + 'api/getMusicList.php',
-data: {
-type: type,
-page: page,
-pageSize: pageSize,
-username: getUserInfo('username'),
-password: getUserInfo('password')
-},
-contentType: 'application/x-www-form-urlencoded',
-dataType: 'json',
-success: function (data) {
-$('.page-musicList .loading').hide()
-$('.page-musicList .loadMore').show()
-if (data.code == 200) {
-var list = data.result
-if (list.length == 0) {
-$('.page-musicList .loadMore button').hide()
-return
-}
-var html = getListHtml(list)
-$('.page-musicList .musicList').append(html)
-$('.page-musicList .loadMore button').unbind().click(function () {
-loadMusicList(type, ++page, pageSize)
-})
-addClick('musicList')
-} else {
-alert(data.msg)
-}
-}
-})
-}
-/**
- * 转换KB为其他单位
- * @param {int} e 文件大小KB
- * @returns
- */
-function fileSize(e) {
-var a = ["B", "KB", "MB", "GB", "TB", "PB"]
-var t = 1024
-for (var i = 0; i < a.length; i++) {
-if (e < t) {
-return (i == 0 ? e : e.toFixed(2)) + a[i]
-}
-e /= t
-}
-}
-/**
- * 加载用户收藏列表
- * @param {int} page 初始值未为1
- * @param {int} pageSize 每页加载数量
- */
-function loadUserLikeList(page, pageSize) {
-if (page == 0) {
-$('.page-user .musicList').html('')
-}
-$('.page-user .loadMore').hide()
-$('.page-user .loading').show()
-$('.page-user .loadMore button').show()
-$('.page-user .loadMore button').unbind().click(function () {
-loadUserLikeList(++page, pageSize)
-})
-$.ajax({
-method: 'post',
-url: baseUrl + 'api/getUserLikeList.php',
-data: {
-page: page,
-pageSize: pageSize,
-username: getUserInfo('username'),
-password: getUserInfo('password')
-},
-contentType: 'application/x-www-form-urlencoded',
-dataType: 'json',
-success: function (data) {
-$('.page-user .loading').hide()
-$('.page-user .loadMore').show()
-if (data.code == 200) {
-var list = data.result
-if (list.length == 0) {
-$('.page-user .loadMore button').hide()
-}
-var html = getListHtml(list)
-$('.page-user .musicList').append(html)
-addClick('user')
-} else {
-alert(data.msg)
-}
-}
-})
-}
-/**
- * 为播放列表绑定事件
- * @param {string} target 当前音乐列表所在页面名称
- */
-function addClick(target) {
-$('.page-' + target + ' .musicList .file-' + nowFileId).addClass('active')
-$('.page-' + target + ' .musicList-item h5, .page-' + target + ' .musicList-item .msg').unbind().click(function () {
-$('.page-' + target + ' .musicList .active').removeClass('active')
-$(this).parent().addClass('active')
-// var fileId = $(this).parent().data('fileid')
-var index = $(this).parent().parent().index()
-playMusic(index, $('.page-' + target + ' .musicList'))
-})
-$('.page-' + target + ' .musicList-item span.addLike').unbind().click(function () {
-if (!UserHasLogin) {
-location.hash = '/login/'
-return
-}
-var hasLike = $(this).attr('data-haslike')
-if (parseInt(hasLike)) {
-if (!confirm('确定要取消收藏？')) {
-return
-}
-}
-var fileId = $(this).parent().parent().data('fileid')
-var ele = $(this)
-request_addLike.abort()
-request_addLike = $.ajax({
-method: 'post',
-url: baseUrl + 'api/addLikeNum.php',
-data: {
-fileId: fileId,
-username: getUserInfo('username'),
-password: getUserInfo('password')
-},
-contentType: 'application/x-www-form-urlencoded',
-dataType: 'json',
-success: function (data) {
-if (data.code == 200) {
-if (data.type) {
-// 已经取消收藏
-ele.removeClass('text-warning')
-ele.find('.bi-star-fill').removeClass('bi-star-fill').addClass('bi-star')
-var ele2 = ele.find('.like_num')
-ele2.html(parseInt(ele2.text()) - 1)
-ele.attr('data-haslike', 0)
-// 用户收藏列表刷新
-if (target == 'user') {
-loadUserLikeList(0, 36)
-}
-} else {
-// 已经收藏
-ele.addClass('text-warning')
-ele.find('.bi-star').removeClass('bi-star').addClass('bi-star-fill')
-var ele2 = ele.find('.like_num')
-ele2.html(parseInt(ele2.text()) + 1)
-ele.attr('data-haslike', 1)
-}
-} else {
-alert(data.msg)
-}
-}
-})
-})
-}
-/**
- * 响应路由控制
- * @param {string} hash 页面的hash，如#/home/
- */
-function router(hash) {
-scrollTo(0, 0)
-// 获取目标界面标识
-hash = hash.split('/')
-var target = hash[1]
-// 交换界面显示
-$('.page-oyp').hide()
-var page = $('.page-' + target)
-page.fadeIn()
-$('.navbar-collapse li.active').removeClass('active')
-$('.navbar-collapse li.nav-item-' + target).addClass('active')
-// 判断目标界面标识 执行对应模块的载入事件
-if (target == 'home') {
-document.title = webTitle
-// 加载热门音乐
-$.ajax({
-method: 'post',
-url: baseUrl + 'api/getMusicList.php',
-data: {
-type: 'all',
-page: 0,
-pageSize: 36,
-username: getUserInfo('username'),
-password: getUserInfo('password')
-},
-contentType: 'application/x-www-form-urlencoded',
-dataType: 'json',
-success: function (data) {
-if (data.code == 200) {
-var list = data.result
-var html = getListHtml(list)
-$('.page-home .musicList').html(html)
-addClick('home')
-} else {
-alert(data.msg)
-}
-}
-})
-if (neverLoad_getTypeList) {
-return
-}
-$.ajax({
-method: 'get',
-url: baseUrl + 'api/getTypeList.php',
-contentType: 'application/x-www-form-urlencoded',
-dataType: 'json',
-success: function (data) {
-neverLoad_getTypeList = 1
-var html = ''
-for (var i = 0; i < data.length; i++) {
-html += '<div class="col-xl-3 col-lg-4 col-6 mb-4">\
-<div data-index="' + i + '" class="rounded shadow border p-3 h-100 border-mainColor text-center musicTypeList-item ' + (i == 0 ? 'musicTypeList-item-active' : '') + '">\
-<div class="overflow-hidden">\
-<h5 class="text-mainColor mb-0 text-nowrap text-truncate">' + data[i][1] + '</h5>\
-<div class="msg text-nowrap text-truncate">' + data[i][0] + '</div>\
-</div>\
-</div>\
-</div>';
-}
-$('.page-home .musicTypeList').html(html)
-$('.page-home .musicTypeList .musicTypeList-item').unbind().click(function () {
-var index = $(this).data('index')
-var item = data[parseInt(index)]
-location.hash = '/musicList/' + encodeURIComponent(item[0]) + '/' + encodeURIComponent(item[1]) + '/'
-})
-}
-})
-} else if (target == 'about') {
-document.title = '关于 - ' + webTitle
-// 界面载入事件
-// ...
-} else if (target == 'search') {
-document.title = '音乐搜索 - ' + webTitle
-} else if (target == 'login') {
-if (hash[2] == 'register') {
-page.find('input').val('')
-page.find('.page-sub-register').show()
-page.find('.title').html('用户注册')
-document.title = '用户注册 - ' + webTitle
-} else {
-page.find('.page-sub-login').show()
-page.find('.title').html('用户登录')
-document.title = '用户登录 - ' + webTitle
-}
-} else if (target == 'musicList') {
-var typeKey = decodeURIComponent(hash[2])
-var typeName = decodeURIComponent(hash[3])
-document.title = typeName + ' - 音乐列表 - ' + webTitle
-$('.page-musicList .breadcrumb .active').html(typeName + ' - 音乐列表')
-// if (nowLoadMusicType != typeName) {
-//nowLoadMusicType = typeName
-//loadMusicList(typeKey, 0, 36)
-// }
-loadMusicList(typeKey, 0, 36)
-} else if (target == 'user') {
-document.title = '我的收藏 - ' + webTitle
-if (!UserHasLogin && !ifLogin()) {
-location.hash = '/login/'
-return
-}
-loadUserLikeList(0, 36)
-} else {
-location.hash = '/home/'
-}
-}
-window.addEventListener('hashchange', function (event) {
-// 监听Hash改变 通过location.hash='xxx'可触发
-var hash = new URL(event.newURL).hash
-router(hash)
-})
-/**
- * 登陆成功时执行的事件
- */
-function hasLogin() {
-UserHasLogin = 1
-$('.navbar-collapse li.nav-item-login').hide()
-$('.navbar-collapse li.nav-item-logout').show()
-}
-/**
- * 未登录时执行的事件
- */
-function notLogin() {
-UserHasLogin = 0
-$('.navbar-collapse li.nav-item-logout').hide()
-$('.navbar-collapse li.nav-item-login').show()
-}
-/**
- * 判断用户是否已经登录
- * @returns bool
- */
-function ifLogin() {
-try {
-var userdata = JSON.parse(localStorage[userLoginDataKeyName])
-if (userdata.username && userdata.password && userdata.email) {
-var success = 0
-$.ajax({
-url: baseUrl + 'api/login.php',
-method: 'post',
-data: {
-username: userdata.username,
-password: userdata.password
-},
-success: function (data) {
-if (data.code == 200) {
-// 登录成功
-hasLogin()
-localStorage[userLoginDataKeyName] = JSON.stringify(data.result)
-success = 1
-} else {
-notLogin()
-success = 0
-}
-},
-async: false
-})
-if (success) {
-return true
-} else {
-return false
-}
-} else {
-notLogin()
-return false
-}
-} catch (error) {
-notLogin()
-return false
-}
-}
-/**
- * 搜索音乐
- * @param {string} keyword 搜索关键词
- * @param {int} page 页码
- * @param {int} pageSize 每页加载数量
- */
-function searchMusic(keyword, page, pageSize) {
-if (page == 0) {
-$('.page-search .musicList').html('')
-}
-$('.page-search .loadMore').hide()
-$('.page-search .loading').show()
-$('.page-search .loadMore button').show()
-$('.page-search .loadMore button').unbind().click(function () {
-searchMusic(keyword, ++page, pageSize)
-})
-request_secrahMusic.abort()
-request_secrahMusic = $.ajax({
-method: 'post',
-url: baseUrl + 'api/searchMusic.php',
-data: {
-page: page,
-pageSize: pageSize,
-keyword: keyword,
-username: getUserInfo('username'),
-password: getUserInfo('password')
-},
-contentType: 'application/x-www-form-urlencoded',
-dataType: 'json',
-success: function (data) {
-$('.page-search .loading').hide()
-$('.page-search .loadMore').show()
-if (data.code == 200) {
-var list = data.result
-if (list.length == 0) {
-$('.page-search .loadMore button').hide()
-}
-var html = getListHtml(list)
-$('.page-search .musicList').append(html)
-addClick('search')
-} else {
-alert(data.msg)
-}
-}
-})
-}
-$(document).ready(function () {
-// console.log('%cHello Poncon 2022-05-07', 'color: orange; border: 2px solid orange; padding: 2px 4px; font-size: 16px;')
-if (!location.hash.split('/')[1]) {
-history.replaceState({}, null, '#/home/')
-}
-router(location.hash)
-ifLogin()
-/**
-* 收集并验证表单
-* @param {object} data 空对象，用于存储表单数据
-* @param {int} mode 验证模式，1:验证整个注册页表单 2: 跳过验证码字段
-* @returns 
+* 切换页面显示
+* @param target 页面标识
 */
-function validation_register(data, mode) {
-data.username = $('.page-login .page-sub-register .input-username').val()
-data.email = $('.page-login .page-sub-register .input-email').val()
-data.password = $('.page-login .page-sub-register .input-password').val()
-var password2 = $('.page-login .page-sub-register .input-password2').val()
-data.verCode = $('.page-login .page-sub-register .input-verCode').val()
-if (!data.username.match(/^\w{4,20}$/)) {
-alert('用户名要求长度为4-20，只能包含数字、字母和下划线')
-return false
-} else if (!data.email.match(/^\w+([-+.]\w+)*@\w+([-.]\w+)*\.\w+([-.]\w+)*$/)) {
-alert('邮箱不合法')
-return false
-} else if (!data.password.match(/^\w{8,20}$/)) {
-alert('密码要求长度为8-20，只能包含数字、字母和下划线')
-return false
-} else if (data.password != password2) {
-alert('两次输入的密码不一致')
-return
-} else if (!data.verCode && mode == 1) {
-alert('请输入验证码')
-return false
+Poncon.prototype.changeView = function (target) {
+if (!target) {
+return;
 }
-return true
-}
-$('.page-login .page-sub-register button.register').click(function () {
-var data = {}
-if (!validation_register(data, 1)) {
-return
-}
-var username = data.username
-var password = data.password
-$.ajax({
-method: 'post',
-url: baseUrl + 'api/register.php',
-data: {
-username: username,
-password: md5(password),
-email: data.email,
-verCode: data.verCode
-},
-contentType: 'application/x-www-form-urlencoded',
-dataType: 'json',
-success: function (data) {
-if (data.code == 200) {
-location.hash = '/login/'
-// console.log(username, password)
-$('.page-login .page-sub-login .input-username').val(username)
-$('.page-login .page-sub-login .input-password').val(password)
-} else {
-}
-alert(data.msg)
-}
-})
-})
-$('.page-login .page-sub-register button.getVerCode').click(function () {
-var data = {}
-if (!validation_register(data, 2)) {
-return
-}
-var ele = $(this)
-ele.attr('disabled', 'disabled')
-$.ajax({
-method: 'post',
-url: baseUrl + 'api/getCode.php',
-data: {
-email: data.email
-},
-contentType: 'application/x-www-form-urlencoded',
-dataType: 'json',
-success: function (data) {
-if (data.code == 200) {
-for (var i = 0; i < 60; i++) {
-(function (i) {
-setTimeout(function () {
-ele.html(60 - i + '秒后重新获取')
-}, 1000 * i)
-}(i))
-}
-setTimeout(() => {
-ele.removeAttr('disabled')
-ele.html('获取验证码')
-}, 1000 * 60);
-} else {
-alert(data.msg)
-ele.removeAttr('disabled')
-ele.html('获取验证码')
-}
-}
-})
-})
-$('.page-login .page-sub-login button.login').click(function () {
-var username = $('.page-login .page-sub-login .input-username').val()
-var password = $('.page-login .page-sub-login .input-password').val()
-if (!username || !password) {
-alert('账号和密码不能为空')
-return
-} else if ((!username.match(/^\w{4,20}$/)
-&& !username.match(/^\w+([-+.]\w+)*@\w+([-.]\w+)*\.\w+([-.]\w+)*$/))
-|| !password.match(/^\w{8,20}$/)) {
-alert('账号或密码格式错误')
-return
-}
-$.ajax({
-method: 'post',
-url: baseUrl + 'api/login.php',
-data: {
-username: username,
-password: md5(password)
-},
-contentType: 'application/x-www-form-urlencoded',
-dataType: 'json',
-success: function (data) {
-if (data.code == 200) {
-// 登录成功
-localStorage[userLoginDataKeyName] = JSON.stringify(data.result)
-location.hash = '/home/'
-hasLogin()
-} else {
-alert(data.msg)
-}
-}
-})
-})
-$('.page-login .page-sub-login .input-password').bind('keyup', function (event) {
-if (event.keyCode == 13) {
-$(this).blur()
-$('.page-login .page-sub-login button.login').click()
-}
-})
-$('.page-login .page-sub-register .input-verCode').bind('keyup', function (event) {
-if (event.keyCode == 13) {
-$(this).blur()
-$('.page-login .page-sub-register button.getVerCode').click()
-}
-})
-$('.nav-item-logout').click(function () {
-if (!confirm('确定要退出登录吗？')) {
-return
-}
-localStorage[userLoginDataKeyName] = ''
-notLogin()
-})
-$('span.goDownloadMusicGood').click(function () {
-if (UserHasLogin) {
-var downloadUrl = ap.options.audio[nowPlayIndex].url
-$('.download_iframes').append('<iframe src="' + downloadUrl + '"></iframe>')
-$('.modal-msg').modal('show')
-} else {
-location.hash = '/login/'
-}
-})
-$('body').show()
-$('a').attr('draggable', 'false')
-new ClipboardJS('.copybtn')
-$('.page-search button.search').click(function () {
-var keyword = $('.page-search input.keyword').val()
-if (keyword) {
-searchMusic(keyword, 0, 36)
-}
-})
-$('.page-search input.keyword').bind('keyup', function (event) {
-if (event.keyCode == "13") {
-//编辑框失去焦点
-$('.page-search input.keyword').blur()
-//模拟点击搜索按钮
-$('.page-search button.search').click()
-}
-})
-$(".navbar-collapse li").click(function () {
-var e = $(".navbar button.navbar-toggler")
-if (e.css("display") == "block") {
-$(".navbar button.navbar-toggler").click()
-}
-})
-})
-<?php
+document.querySelectorAll('.poncon-page').forEach(function (dom) {
+dom.style.display = 'none';
+});
+var dom = document.querySelector(".poncon-".concat(target));
+dom.style.display = '';
+};
 /**
- * 
- * 增加或删除收藏，向歌曲数据中添加用户名
- */
-include './init_db.php';
-$fileId = defaultGetData('fileId', '');
-$username = defaultGetData('username', '');
-$password = defaultGetData('password', '');
-if (!$username || !$password || !$fileId) {
-die(json_encode(array(
-'code' => 900,
-'msg' => '参数缺失'
-)));
-}
-$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music_user` WHERE (`username` = '$username' OR `email` = '$username') AND `password` = '$password' LIMIT 1");
-if (!mysqli_num_rows($result)) {
-die(json_encode(array(
-'code' => 907,
-'msg' => '账号或密码错误'
-)));
-}
-// 判断文件是否存在
-$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music` WHERE `fileId` = '$fileId' LIMIT 1;");
-if (!$result) {
-die(json_encode(array(
-'code' => 903,
-'msg' => '数据库出错'
-)));
-}
-if (!mysqli_num_rows($result)) {
-die(json_encode(array(
-'code' => 901,
-'msg' => '暂无查询结果'
-)));
-}
-while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC)) {
-$collect_userList = $row['collect_userList'];
-$collect_userList_data = explode(',', $collect_userList);
-$like_num = (int)$row['like_num'];
-// 判断用户是否已经收藏
-if (in_array($username, $collect_userList_data)) {
-// 用户已经收藏，取消收藏
-$collect_userList_data = array_diff($collect_userList_data, [$username]);
-$collect_userList = '';
-foreach ($collect_userList_data as $value) {
-if ($value) {
-$collect_userList .= ',' . $value;
-}
-}
-$order_type = 1;
-$like_num--;
-} else {
-// 用户未收藏，增加收藏
-$collect_userList .= ',' . $username;
-$order_type = 0;
-$like_num++;
-}
-$sql = "UPDATE `copyrighted_music` SET `collect_userList` = '$collect_userList', `like_num` = $like_num WHERE `fileId` = '$fileId';";
-$result2 = mysqli_query($conn, $sql);
-if (!$result2) {
-die(json_encode(array(
-'code' => 903,
-'msg' => '数据库出错'
-)));
-}
-if ($order_type) {
-echo json_encode(array(
-'code' => 200,
-'msg' => '取消收藏成功',
-'type' => $order_type
-));
-} else {
-echo json_encode(array(
-'code' => 200,
-'msg' => '收藏成功',
-'type' => $order_type
-));
-}
-}
-<?php
+* 设置页面名称列表
+* @param pageNames 页面名称列表
+*/
+Poncon.prototype.setPageList = function (pageNames) {
+var _this_1 = this;
+pageNames.forEach(function (target) {
+var dom = document.querySelector(".poncon-".concat(target));
+_this_1.pages[target] = {
+dom: dom,
+event: (function () { }),
+data: {}
+};
+});
+this.pageNames = pageNames;
+};
 /**
- * 
- * 获取音乐列表
- * 可根据分类筛选，按照页码和每页数量输出数据
- * 按照收听人数排序
- * 
- * 待优化：传入用户名，遍历音乐列表时，同时输出该歌曲用户是否收藏，前端发现用户已经收藏，则显示为星标
+* 配置页面
+* @param target 页面标识
+* @param func 页面载入事件
+*/
+Poncon.prototype.setPage = function (target, func) {
+if (!target) {
+return;
+}
+this.pages[target]['event'] = func || (function () { });
+};
+/**
+* 开启路由系统
+*/
+Poncon.prototype.start = function () {
+var _this = this;
+window.addEventListener('hashchange', function (event) {
+var hash = new URL(event.newURL).hash;
+_this.loadTarget(hash);
+});
+this.loadTarget();
+};
+/**
+* 切换页面并执行页面事件
+* @param hash 页面标识
+*/
+Poncon.prototype.loadTarget = function (hash) {
+var target = this.getTarget(hash);
+var dom = this.getDom(target);
+var args = this.getArgs(hash);
+this.changeView(target);
+this.pages[target].event(dom, args, this.pages[target].data);
+};
+/**
+* 获取页面参数列表
+* @param hash 网址Hash
+* @returns 页面参数列表
+*/
+Poncon.prototype.getArgs = function (hash) {
+var strs = (hash || location.hash).split('/');
+if (strs.length < 3) {
+return [];
+}
+return strs.slice(2);
+};
+/**
+* 获取当前页面标识, 支持自动矫正
+* @param hash 网址hash
+* @returns 页面标识
+*/
+Poncon.prototype.getTarget = function (hash) {
+var strs = (hash || location.hash).split('/');
+var target = strs[1] || '';
+// target不合法或者不在白名单
+if (target.search(/^\w+$/) != 0 || this.pageNames.indexOf(target) == -1) {
+history.replaceState({}, '', "".concat(location.pathname));
+return 'home';
+}
+return target;
+};
+/**
+* 获取页面DOM
+* @param target 页面标识
+* @returns 页面DOM元素
+*/
+Poncon.prototype.getDom = function (target) {
+return document.querySelector(".poncon-".concat(target));
+};
+return Poncon;
+}());
+exports["default"] = Poncon;
+"use strict";
+/**
+ * @author 欧阳鹏
+ * https://apee.top
  */
-include './init_db.php';
-$type = defaultGetData('type', '');
-$page = defaultGetData('page', 0);
-$pageSize = defaultGetData('pageSize', 30);
-$username = defaultGetData('username', '');
-$password = defaultGetData('password', '');
-$offset = $page * $pageSize;
-if ($username && $password) {
-$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music_user` WHERE (`username` = '$username' OR `email` = '$username') AND `password` = '$password' LIMIT 1");
-if (!mysqli_num_rows($result)) {
-die(json_encode(array(
-'code' => 907,
-'msg' => '账号或密码错误'
-)));
+var Poncon = /** @class */ (function () {
+function Poncon() {
+this.pages = {};
+this.pageNames = []; // 页面列表
 }
+/**
+* 切换页面显示
+* @param target 页面标识
+*/
+Poncon.prototype.changeView = function (target) {
+if (!target) {
+return;
 }
-if ($type == 'all') {
-$sql = "SELECT * FROM `copyrighted_music` ORDER BY `listen_num` DESC LIMIT $pageSize OFFSET $offset;";
-} else {
-$sql = "SELECT * FROM `copyrighted_music` WHERE `musicType` LIKE '%$type%' ORDER BY `listen_num` DESC LIMIT $pageSize OFFSET $offset;";
+document.querySelectorAll('.poncon-page').forEach(function (dom) {
+dom.style.display = 'none';
+});
+var dom = document.querySelector(".poncon-".concat(target));
+dom.style.display = '';
+};
+/**
+* 设置页面名称列表
+* @param pageNames 页面名称列表
+*/
+Poncon.prototype.setPageList = function (pageNames) {
+var _this_1 = this;
+pageNames.forEach(function (target) {
+var dom = document.querySelector(".poncon-".concat(target));
+_this_1.pages[target] = {
+dom: dom,
+event: (function () { }),
+data: {}
+};
+});
+this.pageNames = pageNames;
+};
+/**
+* 配置页面
+* @param target 页面标识
+* @param func 页面载入事件
+*/
+Poncon.prototype.setPage = function (target, func) {
+if (!target) {
+return;
 }
-$result = mysqli_query($conn, $sql);
-if (!$result) {
-die(json_encode(array(
-'code' => 903,
-'msg' => '数据库出错'
-)));
+this.pages[target]['event'] = func || (function () { });
+};
+/**
+* 开启路由系统
+*/
+Poncon.prototype.start = function () {
+var _this = this;
+window.addEventListener('hashchange', function (event) {
+var hash = new URL(event.newURL).hash;
+_this.loadTarget(hash);
+});
+this.loadTarget();
+};
+/**
+* 切换页面并执行页面事件
+* @param hash 页面标识
+*/
+Poncon.prototype.loadTarget = function (hash) {
+var target = this.getTarget(hash);
+var dom = this.getDom(target);
+var args = this.getArgs(hash);
+this.changeView(target);
+this.pages[target].event(dom, args, this.pages[target].data);
+};
+/**
+* 获取页面参数列表
+* @param hash 网址Hash
+* @returns 页面参数列表
+*/
+Poncon.prototype.getArgs = function (hash) {
+var strs = (hash || location.hash).split('/');
+if (strs.length < 3) {
+return [];
 }
-$data = array('code' => 200, 'msg' => '查询成功', 'result' => array());
-$x = 0;
-while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC)) {
-$collect_userList = $row['collect_userList'];
-$collect_userList_data = explode(',', $collect_userList);
-if ($username && in_array($username, $collect_userList_data)) {
-$row['hasLike'] = 1; // 用户已收藏
-} else {
-$row['hasLike'] = 0; // 用户未收藏
+return strs.slice(2);
+};
+/**
+* 获取当前页面标识, 支持自动矫正
+* @param hash 网址hash
+* @returns 页面标识
+*/
+Poncon.prototype.getTarget = function (hash) {
+var strs = (hash || location.hash).split('/');
+var target = strs[1] || '';
+// target不合法或者不在白名单
+if (target.search(/^\w+$/) != 0 || this.pageNames.indexOf(target) == -1) {
+history.replaceState({}, '', "".concat(location.pathname));
+return 'home';
 }
-$row['like_num'] = count($collect_userList_data) - 1;
-unset($row['collect_userList']);
-$data['result'][$x++] = $row;
+return target;
+};
+/**
+* 获取页面DOM
+* @param target 页面标识
+* @returns 页面DOM元素
+*/
+Poncon.prototype.getDom = function (target) {
+return document.querySelector(".poncon-".concat(target));
+};
+return Poncon;
+}());
+!function n(r,c,a){function i(e,t){if(!c[e]){if(!r[e]){var o="function"==typeof require&&require;if(!t&&o)return o(e,!0);if(s)return s(e,!0);throw(t=new Error("Cannot find module '"+e+"'")).code="MODULE_NOT_FOUND",t}o=c[e]={exports:{}},r[e][0].call(o.exports,function(t){return i(r[e][1][t]||t)},o,o.exports,n,r,c,a)}return c[e].exports}for(var s="function"==typeof require&&require,t=0;t<a.length;t++)i(a[t]);return i}({1:[function(t,e,o){const n=t("../../src/poncon"),r=new n.default;r.setPageList(["home","about"]),r.start()},{"../../src/poncon":2}],2:[function(t,e,o){"use strict";function n(){this.pages={},this.pageNames=[]}o.__esModule=!0,n.prototype.changeView=function(t){t&&(document.querySelectorAll(".poncon-page").forEach(function(t){t.style.display="none"}),document.querySelector(".poncon-".concat(t)).style.display="")},n.prototype.setPageList=function(t){var o=this;t.forEach(function(t){var e=document.querySelector(".poncon-".concat(t));o.pages[t]={dom:e,event:function(){}}}),this.pageNames=t},n.prototype.setPage=function(t,e){var o;t&&(o=document.querySelector(".poncon-".concat(t)),this.pages[t]={dom:o,event:e||function(){}})},n.prototype.start=function(){var e=this;window.addEventListener("hashchange",function(t){t=new URL(t.newURL).hash;e.loadTarget(t)}),this.loadTarget()},n.prototype.loadTarget=function(t){var e=this.getTarget(t),o=this.getDom(e),t=this.getArgs(t);this.changeView(e),this.pages[e].event(e,o,t)},n.prototype.getArgs=function(t){t=(t||location.hash).split("/");return t.length<3?[]:t.slice(2)},n.prototype.getTarget=function(t){t=(t||location.hash).split("/")[1]||"";return 0!=t.search(/^\w+$/)||-1==this.pageNames.indexOf(t)?(history.replaceState({},"","".concat(location.pathname)),"home"):t},n.prototype.getDom=function(t){return document.querySelector(".poncon-".concat(t))},o.default=n},{}]},{},[1]);
+"use strict";
+exports.__esModule = true;
+var poncon_1 = require("../../src/poncon");
+var poncon = new poncon_1["default"]();
+poncon.setPageList(['home', 'about']);
+poncon.start();
+(function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
+const ponconjs = require('../../src/poncon')
+const poncon = new ponconjs.default()
+poncon.setPageList(['home', 'about'])
+poncon.start()
+},{"../../src/poncon":2}],2:[function(require,module,exports){
+"use strict";
+exports.__esModule = true;
+/**
+ * @author 欧阳鹏
+ * https://apee.top
+ */
+var Poncon = /** @class */ (function () {
+function Poncon() {
+this.pages = {};
+this.pageNames = []; // 页面列表
 }
-echo json_encode($data);
-import json
-data = []
-for i in range(1, 12):
-filename = 'files_json/p' + str(i) + '.txt'
-subData = json.load(
-open(filename, 'r', encoding='utf-8'))['data']['InfoList']
-for j in subData:
-data.append({
-'etag': j['Etag'],
-'fileId': j['FileId'],
-'downloadUrl': j['DownloadUrl'],
-'s3keyFlag': j['S3KeyFlag'],
-'type': j['Type'],
-'fileName': j['FileName'],
-'size': j['Size'],
+/**
+* 切换页面显示
+* @param target 页面标识
+*/
+Poncon.prototype.changeView = function (target) {
+if (!target) {
+return;
+}
+document.querySelectorAll('.poncon-page').forEach(function (dom) {
+dom.style.display = 'none';
+});
+var dom = document.querySelector(".poncon-".concat(target));
+dom.style.display = '';
+};
+/**
+* 设置页面名称列表
+* @param pageNames 页面名称列表
+*/
+Poncon.prototype.setPageList = function (pageNames) {
+var _this_1 = this;
+pageNames.forEach(function (target) {
+var dom = document.querySelector(".poncon-".concat(target));
+_this_1.pages[target] = {
+dom: dom,
+event: (function () { })
+};
+});
+this.pageNames = pageNames;
+};
+/**
+* 配置页面
+* @param target 页面标识
+* @param func 页面载入事件
+*/
+Poncon.prototype.setPage = function (target, func) {
+if (!target) {
+return;
+}
+var dom = document.querySelector(".poncon-".concat(target));
+this.pages[target] = {
+dom: dom,
+event: func || (function () { })
+};
+};
+/**
+* 开启路由系统
+*/
+Poncon.prototype.start = function () {
+var _this = this;
+window.addEventListener('hashchange', function (event) {
+var hash = new URL(event.newURL).hash;
+_this.loadTarget(hash);
+});
+this.loadTarget();
+};
+/**
+* 切换页面并执行页面事件
+* @param hash 页面标识
+*/
+Poncon.prototype.loadTarget = function (hash) {
+var target = this.getTarget(hash);
+var dom = this.getDom(target);
+var args = this.getArgs(hash);
+this.changeView(target);
+this.pages[target].event(target, dom, args);
+};
+/**
+* 获取页面参数列表
+* @param hash 网址Hash
+* @returns 页面参数列表
+*/
+Poncon.prototype.getArgs = function (hash) {
+var strs = (hash || location.hash).split('/');
+if (strs.length < 3) {
+return [];
+}
+return strs.slice(2);
+};
+/**
+* 获取当前页面标识, 支持自动矫正
+* @param hash 网址hash
+* @returns 页面标识
+*/
+Poncon.prototype.getTarget = function (hash) {
+var strs = (hash || location.hash).split('/');
+var target = strs[1] || '';
+// target不合法或者不在白名单
+if (target.search(/^\w+$/) != 0 || this.pageNames.indexOf(target) == -1) {
+history.replaceState({}, '', "".concat(location.pathname));
+return 'home';
+}
+return target;
+};
+/**
+* 获取页面DOM
+* @param target 页面标识
+* @returns 页面DOM元素
+*/
+Poncon.prototype.getDom = function (target) {
+return document.querySelector(".poncon-".concat(target));
+};
+return Poncon;
+}());
+exports["default"] = Poncon;
+},{}]},{},[1]);
+!function n(r,c,a){function i(e,t){if(!c[e]){if(!r[e]){var o="function"==typeof require&&require;if(!t&&o)return o(e,!0);if(s)return s(e,!0);throw(t=new Error("Cannot find module '"+e+"'")).code="MODULE_NOT_FOUND",t}o=c[e]={exports:{}},r[e][0].call(o.exports,function(t){return i(r[e][1][t]||t)},o,o.exports,n,r,c,a)}return c[e].exports}for(var s="function"==typeof require&&require,t=0;t<a.length;t++)i(a[t]);return i}({1:[function(t,e,o){"use strict";o.__esModule=!0;o=new(t("../../src/poncon").default);o.setPageList(["home","about"]),o.start()},{"../../src/poncon":2}],2:[function(t,e,o){"use strict";function n(){this.pages={},this.pageNames=[]}o.__esModule=!0,n.prototype.changeView=function(t){t&&(document.querySelectorAll(".poncon-page").forEach(function(t){t.style.display="none"}),document.querySelector(".poncon-".concat(t)).style.display="")},n.prototype.setPageList=function(t){var o=this;t.forEach(function(t){var e=document.querySelector(".poncon-".concat(t));o.pages[t]={dom:e,event:function(){}}}),this.pageNames=t},n.prototype.setPage=function(t,e){var o;t&&(o=document.querySelector(".poncon-".concat(t)),this.pages[t]={dom:o,event:e||function(){}})},n.prototype.start=function(){var e=this;window.addEventListener("hashchange",function(t){t=new URL(t.newURL).hash;e.loadTarget(t)}),this.loadTarget()},n.prototype.loadTarget=function(t){var e=this.getTarget(t),o=this.getDom(e),t=this.getArgs(t);this.changeView(e),this.pages[e].event(e,o,t)},n.prototype.getArgs=function(t){t=(t||location.hash).split("/");return t.length<3?[]:t.slice(2)},n.prototype.getTarget=function(t){t=(t||location.hash).split("/")[1]||"";return 0!=t.search(/^\w+$/)||-1==this.pageNames.indexOf(t)?(history.replaceState({},"","".concat(location.pathname)),"home"):t},n.prototype.getDom=function(t){return document.querySelector(".poncon-".concat(t))},o.default=n},{}]},{},[1]);
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>路由控制系统</title>
+<script src="./dist/poncon.min.js"></script>
+</head>
+<body>
+<div class="poncon-home poncon-page">
+主页
+</div>
+<div class="poncon-about poncon-page">
+关于
+</div>
+<script>
+var poncon = new Poncon()
+poncon.setPageList(['home', 'about'])
+poncon.setPage('home', function (target, dom, args) {
+console.log(target, dom, args)
 })
-json.dump(data, open('allData.min.json', 'w', encoding='utf-8'))
-print('ok')
-import json
-fromData = json.load(open('data.json', 'r', encoding='utf-8'))
-data = {}
-for i in fromData:
-data[i['title']] = i
-json.dump(data, open('dataFront.json', 'w', encoding='utf-8'))
-print('ok')
-<?php
-/**
- * 
- * 配置文件
- */
-header('Content-type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods:POST,GET,OPTIONS');
-header('Access-Control-Allow-Headers:Authorization,lpy');
-$config = array(
-'mysql' => array(
-'host' => 'localhost',
-'username' => 'root',
-'password' => '',
-'database' => 'ponconsoft'
-),
-'download_url_update_duration' => 5 * 60 * 60, // 下载链接有效期 (s),
-'123pan' => array(
-"username" => "", // 123云盘账号
-"password" => "" // 123云盘密码
-),
-'smtp' => array(
-'smtp_host' => 'smtp.163.com', // SMTP服务器
-'smtp_username' => '', // SMTP账号
-'smtp_password' => '', // SMTP密码
-'smtp_secure' => 'ssl', // 连接加密方法
-'smtp_port' => 994, // SMTP端口
-'sendFrom' => '', // 发件人邮箱
-'sendFromName' => '无忧音乐网' // 发件人名称
-)
-);
-$config['123pan']['authorization'] = get_authorization($config);
-function defaultGetData($key, $value)
-{
-if (array_key_exists($key, $_POST)) {
-return addslashes($_POST[$key] == null ? $value : $_POST[$key]);
-} else {
-return addslashes($value);
+poncon.setPage('about', function (target, dom, args) {
+console.log(target, dom, args)
+})
+poncon.start()
+</script>
+</body>
+</html>
+const ponconjs = require('../../src/poncon')
+const poncon = new ponconjs.default()
+poncon.setPageList(['home', 'about'])
+poncon.start()
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Browseriy 示例</title>
+<style>
+.page {
+padding: 30px;
+margin: 10px;
+border: 1px solid #666666;
+background-color: blanchedalmond;
+border-radius: 15px;
 }
+.page h1 {
+margin-top: 0px;
+margin-bottom: 40px;
+font-size: 40px;
 }
-function get_authorization($config)
-{
-$data = json_decode(file_get_contents('authorization.json'), true);
-$duration_hour = $data['duration_hour'];
-$update_time = $data['update_time'];
-if (time() - $update_time > $duration_hour * 60 * 60) {
-// 令牌过期 更新令牌
-$options = array(
-'http' => array(
-'method' => 'POST',
-'header' => "content-type: application/json",
-'content' => json_encode(array(
-"passport" => $config['123pan']['username'],
-"password" => $config['123pan']['password']
-)),
-'timeout' => 900
-),
-"ssl" => array(
-"verify_peer" => false,
-"verify_peer_name" => false,
-)
-);
-$context = stream_context_create($options);
-$result = file_get_contents('https://www.123pan.com/b/api/user/sign_in', false, $context);
-$authorization = 'Bearer ' . json_decode($result, true)['data']['token'];
-if ($authorization) {
-$data['authorization'] = $authorization;
-$data['update_time'] = time();
-file_put_contents('authorization.json', json_encode($data));
+.page a.active {
+color: white;
+background-color: dimgray;
 }
+.page a {
+font-size: 30px;
+padding: 10px 20px;
+border-radius: 10px;
+margin-right: 20px;
+cursor: pointer;
+background-color: cornsilk;
+text-decoration: none;
+color: black;
 }
-return $data['authorization'];
-}
-<?php
-/**
- * 
- * 获取用户收藏列表
- */
-include './init_db.php';
-$page = defaultGetData('page', 0);
-$pageSize = defaultGetData('pageSize', 30);
-$username = defaultGetData('username', '');
-$password = defaultGetData('password', '');
-$offset = $page * $pageSize;
-if (!$username || !$password) {
-die(json_encode(array(
-'code' => 900,
-'msg' => '参数缺失'
-)));
-}
-if ($username && $password) {
-$result = mysqli_query($conn, "SELECT * FROM `copyrighted_music_user` WHERE (`username` = '$username' OR `email` = '$username') AND `password` = '$password' LIMIT 1");
-if (!mysqli_num_rows($result)) {
-die(json_encode(array(
-'code' => 907,
-'msg' => '账号或密码错误'
-)));
-}
-}
-$sql = "SELECT * FROM `copyrighted_music`;";
-$result = mysqli_query($conn, $sql);
-if (!$result) {
-die(json_encode(array(
-'code' => 903,
-'msg' => '数据库出错'
-)));
-}
-$data = array();
-while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC)) {
-$collect_userList = $row['collect_userList'];
-$collect_userList_data = explode(',', $collect_userList);
-// 判断用户是否已经收藏
-if (in_array($username, $collect_userList_data)) {
-array_push($data, $row);
-}
-}
-$cou = $offset + $pageSize;
-if ($cou > count($data)) {
-$cou = count($data);
-}
-$newData = array();
-for ($x = $offset; $x < $cou; $x++) {
-$data[$x]['hasLike'] = 1;
-unset($data[$x]['collect_userList']);
-array_push($newData, $data[$x]);
-}
-echo json_encode(array(
-'code' => 200,
-'mag' => '获取成功',
-'result' => $newData
-));
+</style>
+</head>
+<body>
+<h1>Browseriy 示例</h1>
+<div class="poncon-home poncon-page" style="display: none;">
+<div class="page">
+<h1>这里是主页</h1>
+<a href="#" class="active">#/home</a>
+<a href="#/about">#/about</a>
+</div>
+</div>
+<div class="poncon-about poncon-page" style="display: none;">
+<div class="page">
+<h1>这里是关于页</h1>
+<a href="#">#/home</a>
+<a href="#/about" class="active">#/about</a>
+</div>
+</div>
+<script src="./bundle.min.js"></script>
+</body>
+</html>

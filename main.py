@@ -2,13 +2,6 @@ from util import str_blocks, get_all_code
 from chat import get_result
 import os
 
-input_code: str = get_all_code('code')
-print('源代码整理完成，共 ' + str(len(input_code.splitlines())) + ' 行')
-code_blocks = str_blocks(input_code)  # 代码块列表
-
-if not os.path.exists('out'):
-    os.mkdir('out')
-
 
 def get_code_msgs(code_blocks):
     '''生成每个代码块的小结，拼接后输出'''
@@ -56,7 +49,14 @@ def get_all_content(main_msg: str):
     return all_content
 
 
+if not os.path.exists('out'):
+    os.mkdir('out')
+
+
 if __name__ == '__main__':
+    input_code: str = get_all_code('code')
+    print('源代码整理完成，共 ' + str(len(input_code.splitlines())) + ' 行')
+    code_blocks = str_blocks(input_code)  # 代码块列表
     code_msgs = get_code_msgs(code_blocks)  # 所有代码块小结拼接
     main_msg = get_main_msg(code_msgs)  # 总结摘要
     all_content = get_all_content(main_msg)  # 完整文章内容
