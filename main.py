@@ -2,7 +2,7 @@ from util import str_blocks, get_all_code
 from chat import get_result
 import os
 
-input_code: str = get_all_code('poncon-copyrighted-music')
+input_code: str = get_all_code('code')
 print('源代码整理完成，共 ' + str(len(input_code.splitlines())) + ' 行')
 code_blocks = str_blocks(input_code)  # 代码块列表
 
